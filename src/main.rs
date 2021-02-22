@@ -30,6 +30,7 @@ use tokio_tungstenite::tungstenite;
 use tokio_tungstenite::tungstenite::protocol::Message;
 
 mod audio;
+mod messages;
 
 /// Forwards the data between `socket` and `ws_stream`. Doesn't do anything with the bytes.
 async fn forward_streams<Stream>(
