@@ -50,7 +50,6 @@ trait Encoder {
 
 /// A stream that encodes PulseAudio-provided audio and generates Replit Audio Server AudioData
 /// messages.
-#[allow(dead_code)]
 pub struct Stream {
     enc: Box<dyn Encoder + Send>,
     pulse: psimple::Simple,
@@ -60,7 +59,6 @@ pub struct Stream {
     dropped_frames: u64,
 }
 
-#[allow(dead_code)]
 impl Stream {
     pub fn new(channels: u8, codec: u16, kbps: u16) -> Result<Stream> {
         let enc: Box<dyn Encoder + Send> = match codec {
