@@ -3,6 +3,7 @@
 
 pub mod client;
 mod io;
+pub mod server;
 
 use std::fmt::Display;
 
