@@ -1,6 +1,7 @@
 //! Parsers for RFB messages.
 #![allow(dead_code)]
 
+pub mod client;
 mod io;
 
 use std::fmt::Display;
