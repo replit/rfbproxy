@@ -1,5 +1,9 @@
 //! A stream encoder that gets the audio samples from PulseAudio.
+//!
+//! Currently, Opus (in a WebM streamable container) and MP3 (in an MPEG-1 container) are
+//! supported, which should cover all of the major browsers.
 
+mod mp3;
 mod opus;
 
 use anyhow::{bail, Context, Result};
@@ -62,6 +66,9 @@ impl Stream {
         let enc: Box<dyn Encoder + Send> = match codec {
             0 => Box::new(
                 opus::OpusEncoder::new(channels, kbps).context("could not create Opus encoder")?,
+            ),
+            1 => Box::new(
+                mp3::Mp3Encoder::new(channels, kbps).context("could not create MP3 encoder")?,
             ),
             _ => bail!("unsupported codec: {}", codec),
         };

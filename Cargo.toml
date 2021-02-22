@@ -15,6 +15,7 @@ http = "0.2"
 hyper = { version = "0.14.4", features = ["server", "tcp", "http1", "http2"] }
 hyper-staticfile = "0.6"
 hyper-tungstenite = "0.2"
+lame-sys = "0.1.2"
 log = "*"
 opus = "0.2.1"
 path-clean = "0.1"
