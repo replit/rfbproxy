@@ -272,8 +272,8 @@ impl WriteHalf<'_> {
                 )) => {
                     if !enabled {
                         // This drops the sending channel and cause the stream to stop.
-                        self.stop_chan = None;
-                        self.audio_stream = None;
+                        self.stop_chan.take();
+                        self.audio_stream.take();
                         self.client_tx
                             .send(
                                 server::Message::ReplitAudioServerMessage(vec![
@@ -452,7 +452,7 @@ impl WriteHalf<'_> {
 
     pub async fn shutdown(&mut self) -> Result<()> {
         // Drop the audio thread.
-        self.stop_chan = None;
+        self.stop_chan.take();
         self.write_ws.shutdown().await?;
         Ok(())
     }

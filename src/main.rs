@@ -49,17 +49,10 @@ where
     let (mut rs, mut ws) = socket.split();
 
     let client_to_server = async move {
-        loop {
-            match rws.next().await {
-                Some(msg) => {
-                    if let Ok(Message::Binary(payload)) = msg {
-                        if let Err(err) = ws.write_all(&payload).await {
-                            log::error!("failed to write a message to the server: {}", err);
-                            break;
-                        }
-                    }
-                }
-                None => {
+        while let Some(msg) = rws.next().await {
+            if let Ok(Message::Binary(payload)) = msg {
+                if let Err(err) = ws.write_all(&payload).await {
+                    log::error!("failed to write a message to the server: {}", err);
                     break;
                 }
             }
@@ -305,8 +298,7 @@ async fn main() -> Result<()> {
         .ok_or(anyhow!("missing --rfb-server arg"))?
         .parse()?;
     let enable_audio = matches.is_present("enable-audio")
-        || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or(std::string::String::from(""))
-            != "";
+        || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or(String::from("")) != "";
     if matches.is_present("http-server") {
         let server = Server::bind(&local_addr.parse()?).serve(hyper::service::make_service_fn(
             |conn: &hyper::server::conn::AddrStream| {

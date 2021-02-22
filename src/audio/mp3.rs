@@ -52,7 +52,7 @@ impl Mp3Encoder {
             .context("failed to set quality to 7")?;
         check_err(unsafe { lame_sys::lame_init_params(ctx) })
             .context("failed to initialize the lame parameters")?;
-        Ok(Mp3Encoder { ctx: ctx })
+        Ok(Mp3Encoder { ctx })
     }
 }
 
