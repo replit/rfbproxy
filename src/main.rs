@@ -1,7 +1,9 @@
-//! An RFB proxy that enables WebSockets.
+//! An RFB proxy that enables WebSockets and audio.
 //!
 //! This crate proxies a TCP Remote Framebuffer server connection and exposes a WebSocket endpoint,
-//! translating the connection between them.
+//! translating the connection between them. It can optionally enable audio using the Replit Audio
+//! messages if the `--enable-audio` flag is passed or the `VNC_ENABLE_EXPERIMENTAL_AUDIO`
+//! environment variable is set to a non-empty value.
 
 extern crate anyhow;
 extern crate clap;
@@ -11,12 +13,17 @@ extern crate hyper;
 extern crate hyper_staticfile;
 extern crate hyper_tungstenite;
 extern crate log;
+extern crate opus;
 extern crate path_clean;
 extern crate tokio;
 
+mod audio;
+mod messages;
+mod rfb;
+
 use std::net::SocketAddr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 use futures::{SinkExt, StreamExt};
 
@@ -26,12 +33,9 @@ use path_clean::PathClean;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite;
 use tokio_tungstenite::tungstenite::protocol::Message;
-
-mod audio;
-mod messages;
-mod rfb;
 
 /// Forwards the data between `socket` and `ws_stream`. Doesn't do anything with the bytes.
 async fn forward_streams<Stream>(
@@ -97,17 +101,94 @@ where
     Ok(())
 }
 
-/// Handles a single WebSocket connection.
+/// Handles a single WebSocket connection. If `enable_audio` is false, it will just forward the
+/// data between them. Otherwise, it will parse and interpret each RFB packet and inject audio
+/// data.
 async fn handle_connection<Stream>(
     rfb_addr: std::net::SocketAddr,
-    ws_stream: tokio_tungstenite::WebSocketStream<Stream>,
+    mut ws_stream: tokio_tungstenite::WebSocketStream<Stream>,
+    enable_audio: bool,
 ) -> Result<()>
 where
     Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     let socket = TcpStream::connect(rfb_addr).await?;
 
-    forward_streams(socket, ws_stream).await
+    if !enable_audio {
+        return forward_streams(socket, ws_stream).await;
+    }
+
+    let (server_tx, mut server_rx) = mpsc::channel(2);
+    let (client_tx, mut client_rx) = mpsc::channel(2);
+    let mut conn = rfb::RfbConnection::new(socket, &mut ws_stream, server_tx, client_tx).await?;
+
+    let (mut wws, mut rws) = ws_stream.split();
+    let (mut rs, mut ws) = conn.split();
+
+    let client_to_server = async {
+        loop {
+            let payload = tokio::select! {
+                Some(payload) = server_rx.recv() => Some(payload),
+                Some(msg) = rws.next() => {
+                    match msg.context("failed to read client-to-server message")? {
+                        Message::Binary(payload) => Some(payload),
+                        Message::Close(_) => break,
+                        msg => {
+                            log::debug!("    ->: Received a message {:?}", msg);
+                            None
+                        }
+                    }
+                },
+                else => break,
+            };
+
+            match payload {
+                Some(payload) => {
+                    if let Err(err) = ws.write_all(&payload).await {
+                        log::error!("failed to write message: {}", err);
+                        break;
+                    }
+                }
+                None => {}
+            }
+        }
+
+        log::info!("client disconnected");
+        ws.shutdown().await?;
+        Ok::<(), anyhow::Error>(())
+    };
+
+    let server_to_client = async {
+        loop {
+            let payload = tokio::select! {
+                Some(payload) = client_rx.recv() => Some(payload),
+                message = rs.read_server_message() => {
+                    match message.context("failed to read server-to-client message")? {
+                        None => break,
+                        Some(msg) => {
+                            log::debug!("<-: {:?}", &msg);
+                            Some(msg.into_data())
+                        }
+                    }
+                },
+                else => break,
+            };
+
+            match payload {
+                Some(payload) => wws.send(Message::Binary(payload)).await?,
+                None => {}
+            }
+        }
+        log::info!("server disconnected");
+        wws.close().await?;
+        Ok::<(), anyhow::Error>(())
+    };
+
+    let (cts, stc) = tokio::join!(client_to_server, server_to_client);
+    cts?;
+    stc?;
+
+    Ok(())
 }
 
 /// Handles HTTP requests. Will serve any files in the current working directory, and the RFB
@@ -116,6 +197,7 @@ async fn handle_request(
     rfb_addr: std::net::SocketAddr,
     mut req: Request<Body>,
     remote_addr: SocketAddr,
+    enable_audio: bool,
 ) -> Result<Response<Body>> {
     // Clean the path so that it can't be used to access files outside the current working
     // directory.
@@ -164,7 +246,7 @@ async fn handle_request(
                     return;
                 }
             };
-            if let Err(e) = handle_connection(rfb_addr, ws_stream).await {
+            if let Err(e) = handle_connection(rfb_addr, ws_stream, enable_audio).await {
                 log::error!("error in websocket connection: {}", e);
             }
             log::info!("{} disconnected", remote_addr);
@@ -182,8 +264,8 @@ async fn handle_request(
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let matches = clap::App::new("rfbproxy")
-        .about("An RFB proxy that enables WebSockets")
+    let matches = clap::App::new("audiomux")
+        .about("An RFB proxy that enables WebSockets and audio")
         .arg(
             clap::Arg::with_name("address")
                 .long("address")
@@ -207,6 +289,11 @@ async fn main() -> Result<()> {
                 "Whether a normal HTTP server will start to serve the current directory's contents",
             ),
         )
+        .arg(
+            clap::Arg::with_name("enable-audio")
+                .long("enable-audio")
+                .help("Whether the muxer will support audio muxing or be a simple WebSocket proxy"),
+        )
         .get_matches();
 
     // Create the event loop and TCP listener we'll accept connections on.
@@ -217,6 +304,9 @@ async fn main() -> Result<()> {
         .value_of("rfb-server")
         .ok_or(anyhow!("missing --rfb-server arg"))?
         .parse()?;
+    let enable_audio = matches.is_present("enable-audio")
+        || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or(std::string::String::from(""))
+            != "";
     if matches.is_present("http-server") {
         let server = Server::bind(&local_addr.parse()?).serve(hyper::service::make_service_fn(
             |conn: &hyper::server::conn::AddrStream| {
@@ -224,7 +314,7 @@ async fn main() -> Result<()> {
                 async move {
                     Ok::<_, hyper::Error>(hyper::service::service_fn(
                         move |req: Request<Body>| async move {
-                            handle_request(rfb_addr, req, remote_addr).await
+                            handle_request(rfb_addr, req, remote_addr, enable_audio).await
                         },
                     ))
                 }
@@ -252,7 +342,7 @@ async fn main() -> Result<()> {
             .await?;
             tokio::spawn(async move {
                 log::info!("Incoming TCP connection from: {}", remote_addr);
-                if let Err(e) = handle_connection(rfb_addr, ws_stream).await {
+                if let Err(e) = handle_connection(rfb_addr, ws_stream, enable_audio).await {
                     log::error!("error in websocket connection: {}", e);
                 }
                 log::info!("{} disconnected", remote_addr);

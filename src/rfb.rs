@@ -2,7 +2,6 @@
 //!
 //! This connection also translates from a TCP socket (server) to a Websocket (client) for use with
 //! noVNC.
-#![allow(dead_code)]
 
 use crate::audio;
 use crate::messages;
