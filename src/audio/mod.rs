@@ -1,5 +1,7 @@
 //! A stream encoder that gets the audio samples from PulseAudio.
 
+mod opus;
+
 use anyhow::{bail, Context, Result};
 use byte_slice_cast::*;
 use psimple;
@@ -55,11 +57,12 @@ pub struct Stream {
 }
 
 #[allow(dead_code)]
-#[allow(unused_variables)]
-#[allow(unreachable_code)]
 impl Stream {
     pub fn new(channels: u8, codec: u16, kbps: u16) -> Result<Stream> {
         let enc: Box<dyn Encoder + Send> = match codec {
+            0 => Box::new(
+                opus::OpusEncoder::new(channels, kbps).context("could not create Opus encoder")?,
+            ),
             _ => bail!("unsupported codec: {}", codec),
         };
         let frame_len_ms = enc.frame_len_ms();
