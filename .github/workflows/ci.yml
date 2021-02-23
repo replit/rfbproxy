@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  ci:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ATiltedTree/setup-rust@v1
+        with:
+          rust-version: stable
+          components: clippy
+
+      - name: Install dependencies
+        run: sudo apt-get install -y libpulse-dev libopus-dev libmp3lame-dev
+
+      - name: build
+        run: cargo build
+      - name: lint
+        run: cargo clippy -- -D warnings
+      - name: rustfmt
+        run: cargo fmt -- --check
+      - name: test
+        run: cargo test
+      - name: doc
+        run: cargo doc
