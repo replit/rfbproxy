@@ -161,7 +161,7 @@ impl RfbConnection {
         })
     }
 
-    pub fn split<'a>(&'a mut self) -> (ReadHalf<'a>, WriteHalf<'a>) {
+    pub fn split(&mut self) -> (ReadHalf, WriteHalf) {
         let (rs, ws) = self.stream.split();
         (
             ReadHalf {
@@ -267,7 +267,7 @@ pub struct WriteHalf<'a> {
 }
 
 impl WriteHalf<'_> {
-    pub async fn write_all(&mut self, buf: &Vec<u8>) -> Result<()> {
+    pub async fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         let mut cur = std::io::Cursor::new(&buf[..]);
         loop {
             if cur.remaining() > 0 {
@@ -478,7 +478,7 @@ impl WriteHalf<'_> {
             // in the connection being closed.
             Err(e) => {
                 log::error!("->: !! welp: {:?}", e);
-                Err(e.into())
+                Err(e)
             }
         }
     }

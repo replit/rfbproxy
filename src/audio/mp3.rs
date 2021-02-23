@@ -3,7 +3,6 @@
 use super::Encoder;
 
 use anyhow::{bail, Context, Result};
-use lame_sys;
 
 /// Error checker for lame_sys functions.
 ///
@@ -25,7 +24,7 @@ fn check_err(num: std::os::raw::c_int) -> Result<std::os::raw::c_int> {
     } else if num == lame_sys::lame_errorcodes_t::FRONTEND_WRITEERROR as i32 {
         bail!("lame: frontend write error");
     } else if num == lame_sys::lame_errorcodes_t::FRONTEND_FILETOOLARGE as i32 {
-        bail!("lame: frontend write error");
+        bail!("lame: frontend file too large");
     } else if num < 0 {
         bail!("lame: unknown error: {}", num);
     }

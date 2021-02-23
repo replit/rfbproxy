@@ -8,7 +8,6 @@ mod opus;
 
 use anyhow::{bail, Context, Result};
 use byte_slice_cast::*;
-use psimple;
 use pulse::sample;
 use pulse::stream::Direction;
 use tokio::sync::{mpsc, oneshot};
@@ -84,7 +83,7 @@ impl Stream {
 
         let spec = sample::Spec {
             format: sample::Format::S16le,
-            channels: channels,
+            channels,
             rate: enc.sample_rate(),
         };
         if !spec.is_valid() {
@@ -108,8 +107,8 @@ impl Stream {
         log::debug!("Opened audio pipe");
 
         Ok(Stream {
-            enc: enc,
-            pulse: pulse,
+            enc,
+            pulse,
             buffer: vec![
                 0i16;
                 channels as usize * sample_rate as usize * frame_len_ms as usize / 1000
@@ -128,7 +127,7 @@ impl Stream {
         self.timestamp = std::cmp::max(
             self.timestamp + self.enc.frame_len_ms(),
             self.stream_start
-                .get_or_insert_with(|| std::time::Instant::now())
+                .get_or_insert_with(std::time::Instant::now)
                 .elapsed()
                 .as_millis() as u64,
         );
@@ -138,8 +137,7 @@ impl Stream {
 
     /// Encodes the frame from the internal buffer and returns the Replit AudioFrame contents.
     fn encode_frame(&mut self) -> Result<Vec<u8>> {
-        let mut payload = Vec::<u8>::with_capacity(self.enc.max_frame_len());
-        payload.resize(self.enc.max_frame_len(), 0);
+        let mut payload = vec![0; self.enc.max_frame_len()];
         payload[..2].copy_from_slice(&[
             0xF5, // message-type
             0x01, // submessage-type
@@ -158,11 +156,11 @@ impl Stream {
         // The Most Significant Bit marks whether the frame is a keyframe.
         let timestamp = (self.timestamp & 0x7FFFFFFF) | ((keyframe as u64) << 31);
         payload[2] = ((payload_size >> 8) & 0xff) as u8;
-        payload[3] = ((payload_size >> 0) & 0xff) as u8;
+        payload[3] = (payload_size & 0xff) as u8;
         payload[4] = ((timestamp >> 24) & 0xff) as u8;
         payload[5] = ((timestamp >> 16) & 0xff) as u8;
         payload[6] = ((timestamp >> 8) & 0xff) as u8;
-        payload[7] = ((timestamp >> 0) & 0xff) as u8;
+        payload[7] = (timestamp & 0xff) as u8;
         payload.truncate(payload_size + 8);
 
         log::debug!(
@@ -180,7 +178,7 @@ impl Stream {
         mut self,
         stop_chan: oneshot::Sender<()>,
         audio_message_chan: mpsc::Sender<Vec<u8>>,
-    ) -> () {
+    ) {
         log::info!("audio thread started");
 
         while !stop_chan.is_closed() {

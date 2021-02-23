@@ -23,7 +23,7 @@ mod rfb;
 
 use std::net::SocketAddr;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 
 use futures::{SinkExt, StreamExt};
 
@@ -135,14 +135,11 @@ where
                 else => break,
             };
 
-            match payload {
-                Some(payload) => {
-                    if let Err(err) = ws.write_all(&payload).await {
-                        log::error!("failed to write message: {}", err);
-                        break;
-                    }
+            if let Some(payload) = payload {
+                if let Err(err) = ws.write_all(&payload).await {
+                    log::error!("failed to write message: {}", err);
+                    break;
                 }
-                None => {}
             }
         }
 
@@ -167,9 +164,8 @@ where
                 else => break,
             };
 
-            match payload {
-                Some(payload) => wws.send(Message::Binary(payload)).await?,
-                None => {}
+            if let Some(payload) = payload {
+                wws.send(Message::Binary(payload)).await?;
             }
         }
         log::info!("server disconnected");
@@ -200,7 +196,7 @@ async fn handle_request(
             std::path::PathBuf::from(uri.path())
                 .clean()
                 .to_str()
-                .ok_or(anyhow!("failed to clean path: {:?}", uri.path()))?,
+                .with_context(|| format!("failed to clean path: {:?}", uri.path()))?,
         );
 
         let mut builder = http::uri::Builder::new();
@@ -292,13 +288,13 @@ async fn main() -> Result<()> {
     // Create the event loop and TCP listener we'll accept connections on.
     let local_addr = matches
         .value_of("address")
-        .ok_or(anyhow!("missing --address arg"))?;
+        .context("missing --address arg")?;
     let rfb_addr: std::net::SocketAddr = matches
         .value_of("rfb-server")
-        .ok_or(anyhow!("missing --rfb-server arg"))?
+        .context("missing --rfb-server arg")?
         .parse()?;
     let enable_audio = matches.is_present("enable-audio")
-        || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or(String::from("")) != "";
+        || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or_else(|_| String::new()) != "";
     if matches.is_present("http-server") {
         let server = Server::bind(&local_addr.parse()?).serve(hyper::service::make_service_fn(
             |conn: &hyper::server::conn::AddrStream| {
