@@ -38,7 +38,7 @@ impl OpusEncoder {
             .context("could not get encoder internal delay")? as usize;
 
         Ok(OpusEncoder {
-            enc: enc,
+            enc,
             muxer: WebmStreamMuxer::new(Self::SAMPLE_RATE, channels, internal_delay),
             wrote_initialization_segment: false,
         })
@@ -113,9 +113,9 @@ pub struct WebmStreamMuxer {
 impl WebmStreamMuxer {
     pub fn new(sample_rate: u32, channels: u8, internal_delay: usize) -> WebmStreamMuxer {
         WebmStreamMuxer {
-            sample_rate: sample_rate,
-            channels: channels,
-            internal_delay: internal_delay,
+            sample_rate,
+            channels,
+            internal_delay,
         }
     }
 
@@ -241,7 +241,7 @@ impl WebmStreamMuxer {
             ((codec_delay_ns >> 24) & 0xff) as u8,
             ((codec_delay_ns >> 16) & 0xff) as u8,
             ((codec_delay_ns >> 8) & 0xff) as u8,
-            ((codec_delay_ns >> 0) & 0xff) as u8,
+            (codec_delay_ns & 0xff) as u8,
             0x63,
             0xA2, // CodecPrivate
             0x93, // Size = 19
@@ -255,9 +255,9 @@ impl WebmStreamMuxer {
             0x64, // "OpusHead"
             0x01, // version
             self.channels,
-            ((self.internal_delay >> 0) & 0xff) as u8,
+            (self.internal_delay & 0xff) as u8,
             ((self.internal_delay >> 8) & 0xff) as u8,
-            ((self.sample_rate >> 0) & 0xff) as u8,
+            (self.sample_rate & 0xff) as u8,
             ((self.sample_rate >> 8) & 0xff) as u8,
             ((self.sample_rate >> 16) & 0xff) as u8,
             ((self.sample_rate >> 24) & 0xff) as u8,
@@ -314,7 +314,7 @@ impl StreamMuxer for WebmStreamMuxer {
             ((timestamp >> 24) & 0xFF) as u8,
             ((timestamp >> 16) & 0xFF) as u8,
             ((timestamp >> 8) & 0xFF) as u8,
-            ((timestamp >> 0) & 0xFF) as u8,
+            (timestamp & 0xFF) as u8,
             0xA3, // SimpleBlock
             0x40 | ((simple_block_len) >> 8) as u8,
             (simple_block_len & 0xff) as u8, // size
