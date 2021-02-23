@@ -74,15 +74,48 @@ impl RfbConnection {
                 buf[0..n].to_vec(),
             ))
             .await?;
-        match ws_stream.next().await {
+        let client_security_handshake = match ws_stream.next().await {
             Some(msg) => match msg.context("bad client security handshake")? {
                 tokio_tungstenite::tungstenite::protocol::Message::Binary(payload) => {
+                    if payload.len() != 1 {
+                        bail!(
+                            "unexpected security-type length. got {}, expected 1",
+                            payload.len()
+                        );
+                    }
                     log::debug!("->: {:?}", &payload);
                     stream.write_all(&payload).await?;
+                    payload[0]
                 }
                 unexpected_msg => bail!("unexpected message {:?}", unexpected_msg),
             },
             None => bail!("missing client security handshake"),
+        };
+        match client_security_handshake {
+            1 => {
+                // None security type
+            }
+            2 => {
+                // VNC Authentication security type
+                n = stream.read(&mut buf).await?;
+                log::debug!("<-: {:?}", &buf[0..n]);
+                ws_stream
+                    .send(tokio_tungstenite::tungstenite::protocol::Message::Binary(
+                        buf[0..n].to_vec(),
+                    ))
+                    .await?;
+                match ws_stream.next().await {
+                    Some(msg) => match msg.context("bad client VNCAuth security handshake")? {
+                        tokio_tungstenite::tungstenite::protocol::Message::Binary(payload) => {
+                            log::debug!("->: {:?}", &payload);
+                            stream.write_all(&payload).await?;
+                        }
+                        unexpected_msg => bail!("unexpected message {:?}", unexpected_msg),
+                    },
+                    None => bail!("missing client VNCAuth security handshake"),
+                }
+            }
+            unsupported => bail!("unsupported security type {}", unsupported),
         }
 
         // SecurityResult handshake.
