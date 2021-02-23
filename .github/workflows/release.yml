@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+
+jobs:
+
+  release:
+    # Should match the version that Polygott uses.
+    runs-on: ubuntu-18.04
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: sudo apt-get install -y libpulse-dev libopus-dev libmp3lame-dev xz-utils
+
+      - name: Bump version and push tag
+        id: bump-version
+        uses: anothrNick/github-tag-action@9aaabdb5e989894e95288328d8b17a6347217ae3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          INITIAL_VERSION: 0.1.0
+          TAG_CONTEXT: repo
+
+      - name: Build
+        run: |
+          cargo build --release
+          tar cJf ./rfbproxy.tar.xz --owner=0:0 --transform=s@target/release@usr/bin@ target/release/rfbproxy
+
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.bump-version.outputs.tag }}
+          release_name: ${{ steps.bump-version.outputs.tag }}
+          draft: false
+          prerelease: false
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./rfbproxy.tar.xz
+          asset_name: rfbproxy.tar.xz
+          asset_content_type: application/octet-stream
