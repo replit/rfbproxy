@@ -22,6 +22,7 @@ trait StreamMuxer {
         w: &mut W,
         frame: &[u8],
         timestamp: u64,
+        keyframe: bool,
     ) -> Result<()>;
 }
 
@@ -44,8 +45,14 @@ trait Encoder {
     /// The maximum size of an encoded and contained frame.
     fn max_frame_len(&self) -> usize;
 
-    /// Encodes a frame into the provided buffer, including the container.
-    fn encode_frame(&mut self, timestamp: u64, input: &[i16], output: &mut [u8]) -> Result<usize>;
+    /// Encodes a frame into the provided buffer, including the container. Returns the size of the
+    /// payload, and whether the frame is a keyframe.
+    fn encode_frame(
+        &mut self,
+        timestamp: u64,
+        input: &[i16],
+        output: &mut [u8],
+    ) -> Result<(usize, bool)>;
 }
 
 /// A stream that encodes PulseAudio-provided audio and generates Replit Audio Server AudioData
@@ -138,22 +145,24 @@ impl Stream {
             0x01, // submessage-type
         ]);
 
-        let payload_size = self
+        let (mut payload_size, keyframe) = self
             .enc
             .encode_frame(self.timestamp, &self.buffer, &mut payload[8..])
-            .context("could not encode frame")?
-            + 4;
+            .context("could not encode frame")?;
+        payload_size += 4;
 
         if payload_size > 0xFFFF {
             bail!("payload exceeds maximum size: {}", payload_size);
         }
 
+        // The Most Significant Bit marks whether the frame is a keyframe.
+        let timestamp = (self.timestamp & 0x7FFFFFFF) | ((keyframe as u64) << 31);
         payload[2] = ((payload_size >> 8) & 0xff) as u8;
         payload[3] = ((payload_size >> 0) & 0xff) as u8;
-        payload[4] = ((self.timestamp >> 24) & 0xff) as u8;
-        payload[5] = ((self.timestamp >> 16) & 0xff) as u8;
-        payload[6] = ((self.timestamp >> 8) & 0xff) as u8;
-        payload[7] = ((self.timestamp >> 0) & 0xff) as u8;
+        payload[4] = ((timestamp >> 24) & 0xff) as u8;
+        payload[5] = ((timestamp >> 16) & 0xff) as u8;
+        payload[6] = ((timestamp >> 8) & 0xff) as u8;
+        payload[7] = ((timestamp >> 0) & 0xff) as u8;
         payload.truncate(payload_size + 8);
 
         log::debug!(

@@ -11,6 +11,7 @@ use rand::Rng;
 pub struct OpusEncoder {
     enc: opus::Encoder,
     muxer: WebmStreamMuxer,
+    wrote_initialization_segment: bool,
 }
 
 impl OpusEncoder {
@@ -39,6 +40,7 @@ impl OpusEncoder {
         Ok(OpusEncoder {
             enc: enc,
             muxer: WebmStreamMuxer::new(Self::SAMPLE_RATE, channels, internal_delay),
+            wrote_initialization_segment: false,
         })
     }
 }
@@ -52,7 +54,16 @@ impl Encoder for OpusEncoder {
         Self::FRAME_LEN_MS
     }
 
-    fn encode_frame(&mut self, timestamp: u64, input: &[i16], output: &mut [u8]) -> Result<usize> {
+    fn encode_frame(
+        &mut self,
+        timestamp: u64,
+        input: &[i16],
+        output: &mut [u8],
+    ) -> Result<(usize, bool)> {
+        let keyframe = !self.wrote_initialization_segment;
+        if keyframe {
+            self.wrote_initialization_segment = true;
+        }
         let mut encoded_chunk = [0u8; 4000]; // Opus' recommended buffer size.
         let encoded_chunk_length = self
             .enc
@@ -67,9 +78,10 @@ impl Encoder for OpusEncoder {
                 &mut inner_cur,
                 &encoded_chunk[..encoded_chunk_length],
                 timestamp,
+                keyframe,
             )
             .context("could not write audio frame")?;
-        Ok(inner_cur.position() as usize)
+        Ok((inner_cur.position() as usize, keyframe))
     }
 
     fn internal_delay(&mut self) -> Result<usize> {
@@ -93,7 +105,6 @@ impl Encoder for OpusEncoder {
 /// * https://www.matroska.org/technical/basics.html
 #[derive(Debug)]
 pub struct WebmStreamMuxer {
-    wrote_initialization_segment: bool,
     sample_rate: u32,
     channels: u8,
     internal_delay: usize,
@@ -102,7 +113,6 @@ pub struct WebmStreamMuxer {
 impl WebmStreamMuxer {
     pub fn new(sample_rate: u32, channels: u8, internal_delay: usize) -> WebmStreamMuxer {
         WebmStreamMuxer {
-            wrote_initialization_segment: false,
             sample_rate: sample_rate,
             channels: channels,
             internal_delay: internal_delay,
@@ -279,10 +289,10 @@ impl StreamMuxer for WebmStreamMuxer {
         w: &mut W,
         frame: &[u8],
         timestamp: u64,
+        keyframe: bool,
     ) -> Result<()> {
-        if !self.wrote_initialization_segment {
+        if keyframe {
             self.write_initialization_segment(w)?;
-            self.wrote_initialization_segment = true;
         }
 
         let cluster_len = frame.len() + 17;
@@ -360,12 +370,15 @@ mod tests {
         ]);
 
         log::info!("Encoding audio chunk...");
+
         let mut payload_size = enc
             .encode_frame(0, &chunk, &mut payload[8..])
-            .expect("could not encode audio data");
+            .expect("could not encode audio data")
+            .0;
         payload_size += enc
             .encode_frame(0, &chunk, &mut payload[8 + payload_size..])
-            .expect("could not encode audio data");
+            .expect("could not encode audio data")
+            .0;
         log::info!("Wrote {} audio bytes!", payload_size);
 
         assert!(payload_size > 0);

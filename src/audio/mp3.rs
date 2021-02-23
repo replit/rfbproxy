@@ -83,16 +83,24 @@ impl Encoder for Mp3Encoder {
         (1.25 * self.frame_len_ms() as f64 * self.sample_rate() as f64) as usize + 7200
     }
 
-    fn encode_frame(&mut self, _timestamp: u64, input: &[i16], output: &mut [u8]) -> Result<usize> {
-        Ok(check_err(unsafe {
-            lame_sys::lame_encode_buffer_interleaved(
-                self.ctx,
-                input.as_ptr() as *mut i16,
-                (input.len() / 2) as std::os::raw::c_int,
-                output.as_mut_ptr(),
-                output.len() as std::os::raw::c_int,
-            )
-        })? as usize)
+    fn encode_frame(
+        &mut self,
+        _timestamp: u64,
+        input: &[i16],
+        output: &mut [u8],
+    ) -> Result<(usize, bool)> {
+        Ok((
+            check_err(unsafe {
+                lame_sys::lame_encode_buffer_interleaved(
+                    self.ctx,
+                    input.as_ptr() as *mut i16,
+                    (input.len() / 2) as std::os::raw::c_int,
+                    output.as_mut_ptr(),
+                    output.len() as std::os::raw::c_int,
+                )
+            })? as usize,
+            true, // All MP3 frames have a valid MPEG-1 header.
+        ))
     }
 }
 
@@ -138,10 +146,12 @@ mod tests {
         log::info!("Encoding audio chunk...");
         let mut payload_size = enc
             .encode_frame(0, &chunk, &mut payload[8..])
-            .expect("could not encode audio data");
+            .expect("could not encode audio data")
+            .0;
         payload_size += enc
             .encode_frame(0, &chunk, &mut payload[8 + payload_size..])
-            .expect("could not encode audio data");
+            .expect("could not encode audio data")
+            .0;
         log::info!("Wrote {} audio bytes!", payload_size);
 
         assert!(payload_size > 0);
