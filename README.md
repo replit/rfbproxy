@@ -8,6 +8,21 @@ enable audio using the [Replit Audio RFB extension](#replit-audio-rfb-extension)
 `--enable-audio` flag is passed or the `VNC_ENABLE_EXPERIMENTAL_AUDIO`
 environment variable is set to a non-empty value.
 
+# Running
+
+Since this is a proxy, so you'll need to have an RFB server running
+already. [TigerVNC](https://tigervnc.org/) is a good option:
+
+```shell
+Xvnc --SecurityTypes={None,VNCAuth} --rfbport=5901 --localhost :1
+```
+
+Now `rfbproxy` can run:
+
+```shell
+cargo run -- [--enable-audio] [--address=0.0.0.0:5900] [--rfb-server=127.0.0.1:5901]
+```
+
 # Replit Audio RFB extension
 
 This uses a proposed extension to the [RFB
