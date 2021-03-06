@@ -45,88 +45,6 @@ impl RfbConnection {
     {
         let mut buf = [0u8; 1024];
 
-        // ProtocolVersion handshake.
-        if stream.read(&mut buf[0..12]).await? != 12 {
-            bail!("missing server handshake");
-        }
-        log::debug!("<-: {:?}", std::str::from_utf8(&buf[0..12])?);
-        ws_stream
-            .send(tokio_tungstenite::tungstenite::protocol::Message::Binary(
-                buf[0..12].to_vec(),
-            ))
-            .await?;
-        match ws_stream.next().await {
-            Some(msg) => match msg.context("bad client ProtocolVersion handshake")? {
-                tokio_tungstenite::tungstenite::protocol::Message::Binary(payload) => {
-                    log::debug!("->: {:?}", std::str::from_utf8(&payload)?);
-                    stream.write_all(&payload).await?;
-                }
-                unexpected_msg => bail!("unexpected message {:?}", unexpected_msg),
-            },
-            None => bail!("missing client ProtocolVersion handshake"),
-        }
-
-        // Security handshake.
-        let mut n = stream.read(&mut buf).await?;
-        log::debug!("<-: {:?}", &buf[0..n]);
-        ws_stream
-            .send(tokio_tungstenite::tungstenite::protocol::Message::Binary(
-                buf[0..n].to_vec(),
-            ))
-            .await?;
-        let client_security_handshake = match ws_stream.next().await {
-            Some(msg) => match msg.context("bad client security handshake")? {
-                tokio_tungstenite::tungstenite::protocol::Message::Binary(payload) => {
-                    if payload.len() != 1 {
-                        bail!(
-                            "unexpected security-type length. got {}, expected 1",
-                            payload.len()
-                        );
-                    }
-                    log::debug!("->: {:?}", &payload);
-                    stream.write_all(&payload).await?;
-                    payload[0]
-                }
-                unexpected_msg => bail!("unexpected message {:?}", unexpected_msg),
-            },
-            None => bail!("missing client security handshake"),
-        };
-        match client_security_handshake {
-            1 => {
-                // None security type
-            }
-            2 => {
-                // VNC Authentication security type
-                n = stream.read(&mut buf).await?;
-                log::debug!("<-: {:?}", &buf[0..n]);
-                ws_stream
-                    .send(tokio_tungstenite::tungstenite::protocol::Message::Binary(
-                        buf[0..n].to_vec(),
-                    ))
-                    .await?;
-                match ws_stream.next().await {
-                    Some(msg) => match msg.context("bad client VNCAuth security handshake")? {
-                        tokio_tungstenite::tungstenite::protocol::Message::Binary(payload) => {
-                            log::debug!("->: {:?}", &payload);
-                            stream.write_all(&payload).await?;
-                        }
-                        unexpected_msg => bail!("unexpected message {:?}", unexpected_msg),
-                    },
-                    None => bail!("missing client VNCAuth security handshake"),
-                }
-            }
-            unsupported => bail!("unsupported security type {}", unsupported),
-        }
-
-        // SecurityResult handshake.
-        n = stream.read(&mut buf).await?;
-        log::debug!("<-: {:?}", &buf[0..n]);
-        ws_stream
-            .send(tokio_tungstenite::tungstenite::protocol::Message::Binary(
-                buf[0..n].to_vec(),
-            ))
-            .await?;
-
         // ClientInit
         match ws_stream.next().await {
             Some(msg) => match msg.context("bad ClientInit handshake")? {
@@ -140,7 +58,7 @@ impl RfbConnection {
         }
 
         // ServerInit handshake.
-        n = stream.read(&mut buf).await?;
+        let n = stream.read(&mut buf).await?;
         let pixel_format = messages::PixelFormat::new(&buf[4..20]);
         log::debug!("<-: {:?}", pixel_format);
         ws_stream
