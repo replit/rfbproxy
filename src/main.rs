@@ -10,10 +10,11 @@ mod auth;
 mod messages;
 mod rfb;
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use futures::{SinkExt, StreamExt};
 
@@ -282,7 +283,23 @@ async fn main() -> Result<()> {
                 .long("enable-audio")
                 .help("Whether the muxer will support audio muxing or be a simple WebSocket proxy"),
         )
+        .arg(
+            clap::Arg::with_name("replid")
+                .long("replid")
+                .takes_value(true)
+                .help("The ID of the Repl. Used for authentication"),
+        )
+        .arg(
+            clap::Arg::with_name("pubkeys")
+                .long("pubkeys")
+                .takes_value(true)
+                .help("A JSON-encoded mapping of key IDs to base64-encoded ed25519 public keys"),
+        )
         .get_matches();
+
+    if matches.value_of("replid").is_some() != matches.value_of("pubkeys").is_some() {
+        bail!("--replid and --pubkeys must be passed together");
+    }
 
     // Create the event loop and TCP listener we'll accept connections on.
     let local_addr = matches
@@ -294,10 +311,26 @@ async fn main() -> Result<()> {
         .parse()?;
     let enable_audio = matches.is_present("enable-audio")
         || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or_else(|_| String::new()) != "";
-    let authentication = match enable_audio {
-        false => Arc::new(auth::RfbAuthentication::Null),
-        true => Arc::new(auth::RfbAuthentication::Passthrough),
+    let authentication = if matches.value_of("replid").is_some() {
+        let mut pubkeys_base64: HashMap<String, String> =
+            serde_json::from_str(matches.value_of("pubkeys").unwrap())?;
+        let pubkeys = pubkeys_base64
+            .drain()
+            .map(|(keyid, pubkey)| Ok((keyid, base64::decode(pubkey)?)))
+            .collect::<std::result::Result<HashMap<String, Vec<u8>>, base64::DecodeError>>()?;
+        Arc::new(auth::RfbAuthentication::Replit {
+            replid: matches.value_of("replid").unwrap().to_string(),
+            pubkeys,
+        })
+    } else if enable_audio {
+        Arc::new(auth::RfbAuthentication::Passthrough)
+    } else {
+        // If both audio and the replit authentications are disabled, we can let the server and
+        // client talk directly to each other without interfering since we don't need to parse any
+        // of the messages.
+        Arc::new(auth::RfbAuthentication::Null)
     };
+
     if matches.is_present("http-server") {
         let server = Server::bind(&local_addr.parse()?).serve(hyper::service::make_service_fn(
             |conn: &hyper::server::conn::AddrStream| {
