@@ -89,7 +89,10 @@ pub fn read<'a>(src: &mut std::io::Cursor<&'a [u8]>, n: usize) -> Result<&'a [u8
         return Err(Error::Incomplete);
     }
 
-    Ok(&src.get_ref()[0..n])
+    let pos = src.position() as usize;
+    let result = &src.get_ref()[pos..pos + n];
+    src.advance(n);
+    Ok(result)
 }
 
 pub fn peek(src: &std::io::Cursor<&[u8]>, n: usize) -> Result<Vec<u8>, Error> {
