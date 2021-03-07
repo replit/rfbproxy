@@ -1,7 +1,8 @@
 //! A wrapper for performing Remote Framebuffer authentication.
 
-use anyhow::{bail, Context, Result};
+use std::collections::HashMap;
 
+use anyhow::{anyhow, bail, Context, Result};
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::protocol::Message as WebSocketMessage;
@@ -137,10 +138,94 @@ where
     Ok(())
 }
 
+/// Validate a Goval Handshake v5 token. It should be:
+///
+/// - Issued by one of the known public keys.
+/// - Be valid at this point in time.
+/// - Be issued for the repl where this is being run.
+#[allow(dead_code)]
+fn validate_token(token: &str, replid: &str, pubkeys: &HashMap<String, Vec<u8>>) -> Result<()> {
+    use prost::Message;
+
+    let token_parts = token.split('.').collect::<Vec<_>>();
+    if token_parts.len() != 4 {
+        bail!("token has wrong number of parts: {}", token_parts.len());
+    }
+    let raw_footer = base64::decode_config(token_parts[3], base64::URL_SAFE_NO_PAD)
+        .context("failed to extract the PASETO footer")?;
+    let footer = crate::api::GovalTokenMetadata::decode(
+        &*base64::decode(&raw_footer).context("failed to base64-decode the PASETO footer")?,
+    )
+    .context("failed to parse the PASETO footer")?;
+
+    let repl_token = crate::api::ReplToken::decode(
+        &*base64::decode(&match paseto::v2::verify_paseto(
+            &token,
+            Some(&std::str::from_utf8(&raw_footer)?),
+            pubkeys
+                .get(&footer.key_id)
+                .ok_or_else(|| anyhow!("could not find {} in pubkeys", &footer.key_id))?,
+        ) {
+            Ok(message) => message,
+            Err(err) => bail!("failed to verify PASETO: {}", err),
+        })
+        .context("failed to base64-decode the PASETO message")?,
+    )
+    .context("failed to parse the PASETO message")?;
+
+    // Validate issue / expiration timestamps.
+    let iat = match repl_token.iat.as_ref() {
+        Some(ts) => std::time::SystemTime::UNIX_EPOCH
+            .checked_add(std::time::Duration::new(ts.seconds as u64, ts.nanos as u32))
+            .ok_or_else(|| anyhow!("overflow decoding iat: {:?}", repl_token.iat.as_ref()))?,
+        None => std::time::SystemTime::UNIX_EPOCH,
+    };
+    let exp = match repl_token.exp.as_ref() {
+        Some(ts) => std::time::SystemTime::UNIX_EPOCH
+            .checked_add(std::time::Duration::new(ts.seconds as u64, ts.nanos as u32))
+            .ok_or_else(|| anyhow!("overflow decoding exp: {:?}", repl_token.exp.as_ref()))?,
+        None => iat
+            .checked_add(std::time::Duration::from_secs(3600))
+            .ok_or_else(|| anyhow!("overflow providing fallback iat: {:?}", &iat))?,
+    };
+    let now = std::time::SystemTime::now();
+    if now < iat {
+        bail!(
+            "token issued in the past: {}",
+            chrono::DateTime::<chrono::offset::Utc>::from(iat).to_rfc3339()
+        );
+    }
+    if now > exp {
+        bail!(
+            "token expired: {}",
+            chrono::DateTime::<chrono::offset::Utc>::from(exp).to_rfc3339()
+        );
+    }
+
+    // Validate ReplID.
+    let token_replid = match &repl_token.metadata {
+        Some(crate::api::repl_token::Metadata::Repl(repl)) => repl.id.clone(),
+        Some(crate::api::repl_token::Metadata::Id(id)) => id.id.clone(),
+        _ => bail!("token does not contain a replid: {:?}", &repl_token),
+    };
+    if token_replid != replid {
+        bail!(
+            "token not issued for replid {:?}: {:?}",
+            &token_replid,
+            replid,
+        );
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use bytes::BytesMut;
+    use prost::Message;
+    use ring::signature::KeyPair;
     use tokio_test::io::Builder;
 
     fn init() {
@@ -232,5 +317,145 @@ mod tests {
             &mut websocket_stream,
         ))
         .expect("could not authenticate");
+    }
+
+    #[test]
+    fn test_validate_token() {
+        init();
+
+        let replid = "repl";
+
+        let sys_rand = ring::rand::SystemRandom::new();
+
+        let keyid = "keyid";
+        let keypair = ring::signature::Ed25519KeyPair::from_pkcs8(
+            ring::signature::Ed25519KeyPair::generate_pkcs8(&sys_rand)
+                .expect("Failed to generate pkcs8 key!")
+                .as_ref(),
+        )
+        .expect("Failed to parse keypair");
+        let pubkey = keypair.public_key();
+        let mut pubkeys = HashMap::<String, Vec<u8>>::new();
+        pubkeys.insert(keyid.to_string(), pubkey.as_ref().to_vec());
+
+        let keyid_other = "keyid_other";
+        let keypair_other = ring::signature::Ed25519KeyPair::from_pkcs8(
+            ring::signature::Ed25519KeyPair::generate_pkcs8(&sys_rand)
+                .expect("Failed to generate pkcs8 key!")
+                .as_ref(),
+        )
+        .expect("Failed to parse keypair");
+        let pubkey_other = keypair_other.public_key();
+        let mut pubkeys_other = HashMap::<String, Vec<u8>>::new();
+        pubkeys_other.insert(keyid_other.to_string(), pubkey_other.as_ref().to_vec());
+
+        let mut pubkeys_wrong_pubkey = HashMap::<String, Vec<u8>>::new();
+        pubkeys_wrong_pubkey.insert(keyid.to_string(), pubkey_other.as_ref().to_vec());
+
+        let token = mint_token(
+            &replid,
+            &keyid,
+            None,
+            Some(prost_types::Timestamp {
+                seconds: 253402329599,
+                nanos: 0,
+            }),
+            &keypair,
+        )
+        .expect("Failed to generate PASETO");
+
+        validate_token(&token, &replid.to_string(), &pubkeys).expect("Failed to validate token");
+        validate_token(
+            &String::from("this is not a token"),
+            &replid.to_string(),
+            &pubkeys,
+        )
+        .expect_err("Should have rejected an invalid token");
+        validate_token(&token, &replid.to_string(), &pubkeys_wrong_pubkey)
+            .expect_err("Should have rejected a token signed with a mismatched key");
+        validate_token(&token, &replid.to_string(), &pubkeys_other)
+            .expect_err("Should have rejected a token signed with an unknown key");
+        validate_token(&token, &String::from("other repl"), &pubkeys)
+            .expect_err("Should have rejected a token signed for another repl");
+
+        validate_token(
+            &mint_token(
+                &replid,
+                &keyid,
+                None,
+                Some(prost_types::Timestamp {
+                    seconds: 0,
+                    nanos: 0,
+                }),
+                &keypair,
+            )
+            .expect("Failed to generate PASETO"),
+            &replid.to_string(),
+            &pubkeys,
+        )
+        .expect_err("Should have rejected an expired token");
+        validate_token(
+            &mint_token(&replid, &keyid, None, None, &keypair).expect("Failed to generate PASETO"),
+            &replid.to_string(),
+            &pubkeys,
+        )
+        .expect_err("Should have rejected an (implicitly) expired token");
+        validate_token(
+            &mint_token(
+                &replid,
+                &keyid,
+                Some(prost_types::Timestamp {
+                    seconds: 253402329599,
+                    nanos: 0,
+                }),
+                Some(prost_types::Timestamp {
+                    seconds: 253402329599,
+                    nanos: 0,
+                }),
+                &keypair,
+            )
+            .expect("Failed to generate PASETO"),
+            &replid.to_string(),
+            &pubkeys,
+        )
+        .expect_err("Should have rejected a not-yet-issued token");
+    }
+
+    fn mint_token(
+        replid: &str,
+        keyid: &str,
+        iat: Option<prost_types::Timestamp>,
+        exp: Option<prost_types::Timestamp>,
+        keypair: &ring::signature::Ed25519KeyPair,
+    ) -> Result<String> {
+        let mut buf = BytesMut::with_capacity(1024);
+
+        let mut repl_token = crate::api::ReplToken::default();
+        repl_token.iat = iat;
+        repl_token.exp = exp;
+        repl_token.cluster = String::from("development");
+        repl_token.metadata = Some(crate::api::repl_token::Metadata::Id(
+            crate::api::repl_token::ReplId {
+                id: String::from(replid),
+                source_repl: String::from(""),
+            },
+        ));
+        repl_token.encode(&mut buf).expect("could not encode token");
+        let message = base64::encode(&buf);
+
+        buf.clear();
+        crate::api::GovalTokenMetadata {
+            key_id: String::from(keyid),
+        }
+        .encode(&mut buf)
+        .expect("could not encode footer");
+        let footer = base64::encode(&buf);
+
+        let token = match paseto::v2::public_paseto(&message, Some(&footer), keypair) {
+            Ok(token) => token,
+            Err(err) => bail!("failed to generate PASETO: {}", err),
+        };
+
+        Ok(token)
     }
 }
