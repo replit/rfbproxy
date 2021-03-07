@@ -19,6 +19,8 @@ lame-sys = "0.1.2"
 log = "*"
 opus = "0.2.1"
 path-clean = "0.1"
+prost = "0.7"
+prost-types = "0.7"
 psimple = { package = "libpulse-simple-binding", version = "2.20.1" }
 pulse = { package = "libpulse-binding", version = "2.20.0" }
 rand = "0.8.2"
@@ -29,3 +31,6 @@ tokio-tungstenite = "0.13.0"
 tempfile = "3"
 matroska = "0.5.5"
 tokio-test = "0.4.0"
+
+[build-dependencies]
+prost-build = { version = "0.7" }

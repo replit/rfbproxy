@@ -1,0 +1,202 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+package api;
+option go_package = "/api";
+
+// This message constitutes the repl metadata and define the repl we're
+// connecting to. All fields are required unless otherwise stated.
+message Repl {
+  string id = 1;
+  string language = 2;
+  string bucket = 3;
+  string slug = 4;
+  string user = 5;
+
+  // (Optional) The replID of a repl to be used as the source filesystem. All
+  // writes will still go to the actual repl. This is intended to be a
+  // replacement for guest repls, giving us cheap COW semantics so all
+  // connections can have a real repl.
+  //
+  // One exception:
+  //
+  // It's important to note that data is not implicitly copied from src to
+  // dest. Only what is explicitly written when talking to pid1 (either
+  // gcsfiles or snapshots) will persist. This makes it slightly different
+  // than just forking.
+  //
+  // It's unclear what the behaviour should be if:
+  // - the dest and src repl both exist
+  // - the dest and src are the same
+  // - we have an src but no dest
+  // consider these unsupported/undefined for now.
+  string sourceRepl = 6;
+}
+
+// The resource limits that should be applied to the Repl's container.
+message ResourceLimits {
+  // Whether the repl has network access.
+  bool net = 1;
+
+  // The amount of RAM in bytes that this repl will have.
+  int64 memory = 2;
+
+  // The number of cores that the container will be allowed to have.
+  double threads = 3;
+
+  // The Docker container weight factor for the scheduler. Similar to the
+  // `--cpu-shares` commandline flag.
+  double shares = 4;
+
+  // The size of the disk in bytes.
+  int64 disk = 5;
+
+  // Whether these limits are cachable, and if they are, by what facet of the token.
+  enum Cachability {
+    // Do not cache these limits.
+    NONE = 0;
+
+    // These limits can be cached and applied to this and any of the user's
+    // other repls.
+    USER = 1;
+
+    // These limits can be cached and applied only to this repl.
+    REPL = 2;
+  }
+
+  Cachability cache = 6;
+}
+
+// Permissions allow tokens to perform certain actions.
+message Permissions {
+  // This token has permission to toggle the always on state of a container.
+  // For a connection to send the AlwaysOn message, it must have this permission.
+  bool toggleAlwaysOn = 1;
+}
+
+// ReplToken is the expected client options during the handshake. This is encoded
+// into the token that is used to connect using WebSocket.
+message ReplToken {
+  // Issue timestamp. Equivalent to JWT's "iat" (Issued At) claim.  Tokens with
+  // no `iat` field will be treated as if they had been issed at the UNIX epoch
+  // (1970-01-01T00:00:00Z).
+  google.protobuf.Timestamp iat = 1;
+
+  // Expiration timestamp. Equivalent to JWT's "exp" (Expiration Time) Claim.
+  // If unset, will default to one hour after `iat`.
+  google.protobuf.Timestamp exp = 2;
+
+  // An arbitrary string that helps prevent replay attacks by ensuring that all
+  // tokens are distinct.
+  string salt = 3;
+
+  // The cluster that a repl is located in. This prevents replay attacks in
+  // which a user is given a token for one cluster and then presents that same
+  // token to a conman instance in another token, which could lead to a case
+  // where multiple containers are associated with a repl.
+  //
+  // Conman therefore needs to validate that this parameter matches the
+  // `-cluster` flag it was started with.
+  string cluster = 4;
+
+  // Whether to persist filesystem, metadata, or both.
+  enum Persistence {
+    // This is the usual mode of operation: both filesystem and metadata will be
+    // persisted.
+    PERSISTENT = 0;
+
+    // The ephemeral flag indicates the repl being connected to will have a time
+    // restriction on stored metadata.  This has the consequence that repl will
+    // be unable to wakeup or serve static traffic once the metadata has timed
+    // out. This option does NOT affect filesystem and other data persistence.
+    //
+    // For context, this value is used on the client when repls are created for:
+    // - replrun
+    // - guests
+    // - anon users
+    // - temp vnc repls
+    // - users with non-verified emails
+    EPHEMERAL = 1;
+
+    // This indicates that the repl being connected does not have the ability to
+    // persist files or be woken up after the lifetime of this repl expires.
+    //
+    // For context, this value is used on the client when repls are created for:
+    // - replrun
+    // - guests
+    // - language pages
+    NONE = 2;
+  }
+  // Whether to persist filesystem, metadata, or both.  When connecting to an
+  // already running/existing repl, its settings will be updated to match this
+  // mode.
+  Persistence persistence = 6;
+
+  // Metadata for the classroom. This is deprecated and should be removed
+  // hopefully soon.
+  message ClassroomMetadata {
+    string id = 1;
+    string language = 2;
+  }
+
+  // Metadata for a repl that is only identified by its id.
+  message ReplID {
+    string id = 1;
+
+    // (Optional) See the comment for Repl.sourceRepl.
+    string sourceRepl = 2;
+  }
+
+  // One of the three ways to identify a repl in goval.
+  oneof metadata {
+    // This is the standard connection behavior. If the repl doesn't exist it
+    // will be created. Any future connections with a matching ID will go to
+    // the same container. If other metadata mismatches besides ID it will be
+    // rectified (typically by recreating the container to make it match the
+    // provided value).
+    Repl repl = 7;
+
+    // The repl must already be known to goval, the connection will proceed
+    // with the Repl metadata from a previous connection's metadata with the
+    // same ID.
+    ReplID id = 8;
+
+    // This is DEPRECATED and only used by the classroom. This will never share
+    // a container between connections. Please don't use this even for tests,
+    // we intend to remove it soon.
+    ClassroomMetadata classroom = 9 [deprecated=true];
+  }
+
+  // The resource limits for the container.
+  ResourceLimits resourceLimits = 10;
+
+  // allows the client to choose a wire format.
+  enum WireFormat {
+    // The default wire format: Protobuf-over-WebSocket.
+    PROTOBUF = 0;
+
+    // Legacy protocol.
+    JSON = 1 [deprecated=true];
+  }
+  WireFormat format = 12;
+
+  message Presenced {
+    uint32 bearerID = 1;
+    string bearerName = 2;
+  }
+  Presenced presenced = 13;
+
+  // Flags are handy for passing arbitrary configs along. Mostly used so
+  // the client can try out new features
+  repeated string flags = 14;
+
+  Permissions permissions = 15;
+}
+
+// GovalTokenMetadata is information about a goval token, that can be used to
+// validate it. It is stored in the footer of the PASETO.
+message GovalTokenMetadata {
+  // The ID of the key that was used to sign the token.
+  string key_id = 1;
+}
