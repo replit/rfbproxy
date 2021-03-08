@@ -5,23 +5,13 @@
 //! messages if the `--enable-audio` flag is passed or the `VNC_ENABLE_EXPERIMENTAL_AUDIO`
 //! environment variable is set to a non-empty value.
 
-extern crate anyhow;
-extern crate clap;
-extern crate env_logger;
-extern crate futures;
-extern crate hyper;
-extern crate hyper_staticfile;
-extern crate hyper_tungstenite;
-extern crate log;
-extern crate opus;
-extern crate path_clean;
-extern crate tokio;
-
 mod audio;
+mod auth;
 mod messages;
 mod rfb;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
@@ -100,17 +90,18 @@ where
 async fn handle_connection<Stream>(
     rfb_addr: std::net::SocketAddr,
     mut ws_stream: tokio_tungstenite::WebSocketStream<Stream>,
+    authentication: &auth::RfbAuthentication,
     enable_audio: bool,
 ) -> Result<()>
 where
-    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send,
 {
-    let socket = TcpStream::connect(rfb_addr).await?;
+    let mut socket = TcpStream::connect(rfb_addr).await?;
+    auth::authenticate(authentication, &mut socket, &mut ws_stream).await?;
 
     if !enable_audio {
         return forward_streams(socket, ws_stream).await;
     }
-
     let (server_tx, mut server_rx) = mpsc::channel(2);
     let (client_tx, mut client_rx) = mpsc::channel(2);
     let mut conn = rfb::RfbConnection::new(socket, &mut ws_stream, server_tx, client_tx).await?;
@@ -186,6 +177,7 @@ async fn handle_request(
     rfb_addr: std::net::SocketAddr,
     mut req: Request<Body>,
     remote_addr: SocketAddr,
+    authentication: Arc<auth::RfbAuthentication>,
     enable_audio: bool,
 ) -> Result<Response<Body>> {
     // Clean the path so that it can't be used to access files outside the current working
@@ -235,7 +227,9 @@ async fn handle_request(
                     return;
                 }
             };
-            if let Err(e) = handle_connection(rfb_addr, ws_stream, enable_audio).await {
+            if let Err(e) =
+                handle_connection(rfb_addr, ws_stream, &authentication, enable_audio).await
+            {
                 log::error!("error in websocket connection: {}", e);
             }
             log::info!("{} disconnected", remote_addr);
@@ -295,16 +289,29 @@ async fn main() -> Result<()> {
         .parse()?;
     let enable_audio = matches.is_present("enable-audio")
         || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or_else(|_| String::new()) != "";
+    let authentication = match enable_audio {
+        false => Arc::new(auth::RfbAuthentication::Null),
+        true => Arc::new(auth::RfbAuthentication::Passthrough),
+    };
     if matches.is_present("http-server") {
         let server = Server::bind(&local_addr.parse()?).serve(hyper::service::make_service_fn(
             |conn: &hyper::server::conn::AddrStream| {
                 let remote_addr = conn.remote_addr();
+                let authentication = authentication.clone();
                 async move {
-                    Ok::<_, hyper::Error>(hyper::service::service_fn(
-                        move |req: Request<Body>| async move {
-                            handle_request(rfb_addr, req, remote_addr, enable_audio).await
-                        },
-                    ))
+                    Ok::<_, hyper::Error>(hyper::service::service_fn(move |req: Request<Body>| {
+                        let authentication = authentication.clone();
+                        async move {
+                            handle_request(
+                                rfb_addr,
+                                req,
+                                remote_addr,
+                                authentication.clone(),
+                                enable_audio,
+                            )
+                            .await
+                        }
+                    }))
                 }
             },
         ));
@@ -328,9 +335,12 @@ async fn main() -> Result<()> {
                 },
             )
             .await?;
+            let authentication = authentication.clone();
             tokio::spawn(async move {
                 log::info!("Incoming TCP connection from: {}", remote_addr);
-                if let Err(e) = handle_connection(rfb_addr, ws_stream, enable_audio).await {
+                if let Err(e) =
+                    handle_connection(rfb_addr, ws_stream, &authentication, enable_audio).await
+                {
                     log::error!("error in websocket connection: {}", e);
                 }
                 log::info!("{} disconnected", remote_addr);
