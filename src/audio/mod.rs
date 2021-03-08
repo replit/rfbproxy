@@ -125,7 +125,7 @@ impl Stream {
             bail!("failed to read PulseAudio data: {}", e);
         }
         self.timestamp = std::cmp::max(
-            self.timestamp + self.enc.frame_len_ms(),
+            self.timestamp.wrapping_add(self.enc.frame_len_ms()),
             self.stream_start
                 .get_or_insert_with(std::time::Instant::now)
                 .elapsed()
