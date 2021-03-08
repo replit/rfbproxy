@@ -253,7 +253,7 @@ async fn handle_request(
 async fn main() -> Result<()> {
     env_logger::init();
 
-    let matches = clap::App::new("audiomux")
+    let matches = clap::App::new("rfbproxy")
         .about("An RFB proxy that enables WebSockets and audio")
         .arg(
             clap::Arg::with_name("address")
