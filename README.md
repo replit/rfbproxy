@@ -10,7 +10,7 @@ environment variable is set to a non-empty value.
 
 # Running
 
-Since this is a proxy, so you'll need to have an RFB server running
+Since this is a proxy, you'll need to have an RFB server running
 already. [TigerVNC](https://tigervnc.org/) is a good option:
 
 ```shell
