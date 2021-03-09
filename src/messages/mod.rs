@@ -1,7 +1,7 @@
 //! Parsers for RFB messages.
 
 pub mod client;
-mod io;
+pub mod io;
 pub mod server;
 
 use std::fmt::Display;
