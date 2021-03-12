@@ -48,7 +48,7 @@ where
         while let Some(msg) = rws.next().await {
             if let Ok(Message::Binary(payload)) = msg {
                 if let Err(err) = ws.write_all(&payload).await {
-                    log::error!("failed to write a message to the server: {}", err);
+                    log::error!("failed to write a message to the server: {:#}", err);
                     break;
                 }
             }
@@ -68,12 +68,12 @@ where
                 }
                 Ok(n) => {
                     if let Err(err) = wws.send(Message::Binary((&buffer[..n]).to_vec())).await {
-                        log::error!("failed to write a message to the client: {}", err);
+                        log::error!("failed to write a message to the client: {:#}", err);
                         break;
                     }
                 }
                 Err(err) => {
-                    log::error!("failed to read a message from the server: {}", err);
+                    log::error!("failed to read a message from the server: {:#}", err);
                     break;
                 }
             }
@@ -134,7 +134,7 @@ where
 
             if let Some(payload) = payload {
                 if let Err(err) = ws.write_all(&payload).await {
-                    log::error!("failed to write message: {}", err);
+                    log::error!("failed to write message: {:#}", err);
                     break;
                 }
             }
@@ -229,14 +229,14 @@ async fn handle_request(
             let ws_stream = match websocket.await {
                 Ok(ws_stream) => ws_stream,
                 Err(e) => {
-                    log::error!("error in websocket upgrade: {}", e);
+                    log::error!("error in websocket upgrade: {:#}", e);
                     return;
                 }
             };
             if let Err(e) =
                 handle_connection(rfb_addr, ws_stream, &authentication, enable_audio).await
             {
-                log::error!("error in websocket connection: {}", e);
+                log::error!("error in websocket connection: {:#}", e);
             }
             log::info!("{} disconnected", remote_addr);
         });
@@ -379,7 +379,7 @@ async fn main() -> Result<()> {
                 if let Err(e) =
                     handle_connection(rfb_addr, ws_stream, &authentication, enable_audio).await
                 {
-                    log::error!("error in websocket connection: {}", e);
+                    log::error!("error in websocket connection: {:#}", e);
                 }
                 log::info!("{} disconnected", remote_addr);
             });

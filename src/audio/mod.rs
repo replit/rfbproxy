@@ -185,7 +185,7 @@ impl Stream {
             // Always consume the frame from PulseAudio. That way this thread doesn't end up with
             // huge jumps or large number of dropped messages.
             if let Err(e) = self.read_frame() {
-                log::error!("failed to read audio frame: {}", e);
+                log::error!("failed to read audio frame: {:#}", e);
                 break;
             }
             let permit = match audio_message_chan.try_reserve() {
@@ -196,14 +196,14 @@ impl Stream {
                     continue;
                 }
                 Err(e) => {
-                    log::error!("failed to send audio data: {}", e);
+                    log::error!("failed to send audio data: {:#}", e);
                     break;
                 }
             };
             let payload = match self.encode_frame() {
                 Ok(payload) => payload,
                 Err(e) => {
-                    log::error!("failed to read audio frame: {}", e);
+                    log::error!("failed to read audio frame: {:#}", e);
                     break;
                 }
             };
