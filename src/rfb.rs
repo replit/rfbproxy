@@ -242,7 +242,7 @@ impl WriteHalf<'_> {
                     self.audio_stream = match audio::Stream::new(channels, codec, kbps) {
                         Ok(stream) => Some(stream),
                         Err(e) => {
-                            log::error!("failed to create an audio stream: {}", e);
+                            log::error!("failed to create an audio stream: {:#}", e);
                             self.client_tx
                                 .send(
                                     server::Message::ReplitAudioServerMessage(vec![
@@ -317,7 +317,7 @@ impl WriteHalf<'_> {
                                 )
                                 .await
                             {
-                                log::error!("failed to notify client of audio closure: {}", e);
+                                log::error!("failed to notify client of audio closure: {:#}", e);
                             }
                         });
                     });
