@@ -197,7 +197,6 @@ where
 
     // All the preamble is done, now receive username+password.
     let (username, password) = client_username_password(ws_stream).await?;
-    log::debug!("->: {:?} {:?}", &username, &password);
 
     match validate_token(&username, &replid, pubkeys).context("token validation") {
         Ok(()) => {}
