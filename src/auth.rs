@@ -198,14 +198,18 @@ where
     // All the preamble is done, now receive username+password.
     let (username, password) = client_username_password(ws_stream).await?;
 
-    match validate_token(&username, &replid, pubkeys).context("token validation") {
-        Ok(()) => {}
-        Err(err) => {
+    // We can let users through if they use the "runner" username, _but_ that's only if a password
+    // is provided _and_ the server requires a password.
+    let use_token = username != "runner" || password.is_empty();
+    if use_token {
+        if let Err(err) = validate_token(&username, &replid, pubkeys).context("token validation") {
             // Let the client know that it messed up.
-            stream.write_all(b"\x00\x00\x00\x01").await?;
+            ws_stream
+                .send(WebSocketMessage::Binary((b"\x00\x00\x00\x01").to_vec()))
+                .await?;
             return Err(err);
         }
-    };
+    }
 
     // Now that the token itself was validated, we perform the handshake against the upstream RFB
     // server.
@@ -240,6 +244,16 @@ where
         stream.write_all(&buf[..n]).await?;
     } else if buf[1..n].contains(&1) {
         // None
+        if !use_token {
+            // Let the client know that it messed up, since "runner" cannot be used if the server
+            // does not validate the password.
+            ws_stream
+                .send(WebSocketMessage::Binary((b"\x00\x00\x00\x01").to_vec()))
+                .await?;
+            bail!(
+                "server does not have a password set up, cannot use basic password authentication."
+            );
+        }
         stream.write_all(b"\x01").await?;
     } else {
         bail!("no supported SecurityTypes found: {:?}", &buf[1..n]);
@@ -687,6 +701,97 @@ mod tests {
     }
 
     #[test]
+    fn test_replit_none_security_type_with_runner_username() {
+        init();
+
+        let replid = "repl";
+        let keyid = "keyid";
+
+        let sys_rand = ring::rand::SystemRandom::new();
+        let key_pkcs8 = ring::signature::Ed25519KeyPair::generate_pkcs8(&sys_rand)
+            .expect("Failed to generate pkcs8 key!");
+        let keypair = ring::signature::Ed25519KeyPair::from_pkcs8(key_pkcs8.as_ref())
+            .expect("Failed to parse keypair");
+        let pubkey = keypair.public_key();
+
+        let token = mint_token(
+            &replid,
+            &keyid,
+            None,
+            Some(prost_types::Timestamp {
+                seconds: 253402329599,
+                nanos: 0,
+            }),
+            &keypair,
+        )
+        .expect("Failed to generate PASETO");
+        log::debug!(
+            "{} --replid={} --pubkeys={{\"{}\":\"{}\"}}\n",
+            token,
+            &replid,
+            &keyid,
+            base64::encode(&pubkey)
+        );
+
+        // Acting as a server to avoid having to unmask the frames.
+        let mut websocket_stream =
+            tokio_test::block_on(tokio_tungstenite::WebSocketStream::from_raw_socket(
+                Builder::new()
+                    .write(b"\x82\x0cRFB 003.008\n")
+                    .read(b"\x82\x0cRFB 003.008\n")
+                    // Only the VeNCrypt security type is supported.
+                    .write(b"\x82\x02\x01\x13")
+                    .read(b"\x82\x01\x13")
+                    // VeNCrypt version 0.2
+                    .write(b"\x82\x02\x00\x02")
+                    .read(b"\x82\x02\x00\x02")
+                    // Only the Plain subtype is supported.
+                    .write(b"\x82\x01\x00")
+                    .write(b"\x82\x05\x01\x00\x00\x01\x00")
+                    .read(b"\x82\x04\x00\x00\x01\x00")
+                    // Username length
+                    .read(b"\x82\x04\x00\x00\x00\x06")
+                    // Password length
+                    .read(b"\x82\x04\x00\x00\x00\x08")
+                    // Username
+                    .read(b"\x82\x06runner")
+                    // Password
+                    .read(b"\x82\x08password")
+                    // Oh noes!
+                    .write(b"\x82\x04\x00\x00\x00\x01")
+                    .build(),
+                tokio_tungstenite::tungstenite::protocol::Role::Server,
+                Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
+                    max_send_queue: None,
+                    max_message_size: None,
+                    max_frame_size: None,
+                    accept_unmasked_frames: true,
+                }),
+            ));
+        let mut socket_mock = Builder::new()
+            .read(b"RFB 003.008\n")
+            .write(b"RFB 003.008\n")
+            // Only the None(2) security type is supported.
+            .read(b"\x01\x01")
+            .build();
+
+        let mut pubkeys = HashMap::<String, Vec<u8>>::new();
+        pubkeys.insert(keyid.to_string(), pubkey.as_ref().to_vec());
+
+        let auth_err = tokio_test::block_on(authenticate_replit(
+            &mut socket_mock,
+            &mut websocket_stream,
+            &replid.to_string(),
+            &pubkeys,
+        ))
+        .expect_err("Should have rejected the runner username");
+        assert_eq!(
+            auth_err.to_string(),
+            "server does not have a password set up, cannot use basic password authentication."
+        );
+    }
+
+    #[test]
     fn test_replit_vncauth_security_type() {
         init();
 
@@ -759,6 +864,99 @@ mod tests {
                         ]
                         .concat(),
                     )
+                    // Password
+                    .read(b"\x82\x08password")
+                    // Success!
+                    .write(b"\x82\x04\x00\x00\x00\x00")
+                    .build(),
+                tokio_tungstenite::tungstenite::protocol::Role::Server,
+                Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
+                    max_send_queue: None,
+                    max_message_size: None,
+                    max_frame_size: None,
+                    accept_unmasked_frames: true,
+                }),
+            ));
+        let mut socket_mock = Builder::new()
+            .read(b"RFB 003.008\n")
+            .write(b"RFB 003.008\n")
+            // Only the VncAuth(2) security type is supported.
+            .read(b"\x01\x02")
+            .write(b"\x02")
+            // Challenge + Response. The password is, unsurprisingly, "password".
+            .read(b"\x9e\xdd\x1d\xc2\xee\x5a\x5e\x78\x7f\x55\x21\xf2\x67\x9f\x71\xd6")
+            .write(b"\x15\x6d\x69\xd7\x0f\x22\x21\xb5\x6f\x46\xe2\x92\xa3\xe2\x68\x37")
+            // Success!
+            .read(b"\x00\x00\x00\x00")
+            .build();
+
+        let mut pubkeys = HashMap::<String, Vec<u8>>::new();
+        pubkeys.insert(keyid.to_string(), pubkey.as_ref().to_vec());
+
+        tokio_test::block_on(authenticate_replit(
+            &mut socket_mock,
+            &mut websocket_stream,
+            &replid.to_string(),
+            &pubkeys,
+        ))
+        .expect("could not authenticate");
+    }
+
+    #[test]
+    fn test_replit_vncauth_security_type_with_runner_username() {
+        init();
+
+        let replid = "repl";
+        let keyid = "keyid";
+
+        let sys_rand = ring::rand::SystemRandom::new();
+        let key_pkcs8 = ring::signature::Ed25519KeyPair::generate_pkcs8(&sys_rand)
+            .expect("Failed to generate pkcs8 key!");
+        let keypair = ring::signature::Ed25519KeyPair::from_pkcs8(key_pkcs8.as_ref())
+            .expect("Failed to parse keypair");
+        let pubkey = keypair.public_key();
+
+        let token = mint_token(
+            &replid,
+            &keyid,
+            None,
+            Some(prost_types::Timestamp {
+                seconds: 253402329599,
+                nanos: 0,
+            }),
+            &keypair,
+        )
+        .expect("Failed to generate PASETO");
+        log::debug!(
+            "{} --replid={} --pubkeys={{\"{}\":\"{}\"}}\n",
+            token,
+            &replid,
+            &keyid,
+            base64::encode(&pubkey)
+        );
+
+        // Acting as a server to avoid having to unmask the frames.
+        let mut websocket_stream =
+            tokio_test::block_on(tokio_tungstenite::WebSocketStream::from_raw_socket(
+                Builder::new()
+                    .write(b"\x82\x0cRFB 003.008\n")
+                    .read(b"\x82\x0cRFB 003.008\n")
+                    // Only the VeNCrypt security type is supported.
+                    .write(b"\x82\x02\x01\x13")
+                    .read(b"\x82\x01\x13")
+                    // VeNCrypt version 0.2
+                    .write(b"\x82\x02\x00\x02")
+                    .read(b"\x82\x02\x00\x02")
+                    // Only the Plain subtype is supported.
+                    .write(b"\x82\x01\x00")
+                    .write(b"\x82\x05\x01\x00\x00\x01\x00")
+                    .read(b"\x82\x04\x00\x00\x01\x00")
+                    // Username length
+                    .read(b"\x82\x04\x00\x00\x00\x06")
+                    // Password length
+                    .read(b"\x82\x04\x00\x00\x00\x08")
+                    // Username
+                    .read(b"\x82\x06runner")
                     // Password
                     .read(b"\x82\x08password")
                     // Success!
