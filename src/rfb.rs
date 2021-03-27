@@ -186,7 +186,7 @@ pub struct WriteHalf<'a> {
 
 impl WriteHalf<'_> {
     pub async fn write_all(&mut self, buf: &[u8]) -> Result<()> {
-        let mut cur = std::io::Cursor::new(&buf[..]);
+        let mut cur = std::io::Cursor::new(buf);
         loop {
             if cur.remaining() > 0 {
                 if self.buf.capacity() - self.buf.len() < cur.remaining() {
