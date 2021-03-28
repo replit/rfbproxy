@@ -361,7 +361,7 @@ async fn main() -> Result<()> {
         log::info!("Listening on: {}", local_addr);
 
         while let Ok((raw_stream, remote_addr)) = listener.accept().await {
-            let ws_stream = tokio_tungstenite::accept_hdr_async(
+            let ws_stream = match tokio_tungstenite::accept_hdr_async(
                 raw_stream,
                 |request: &tungstenite::handshake::server::Request,
                  mut response: tungstenite::handshake::server::Response| {
@@ -372,7 +372,14 @@ async fn main() -> Result<()> {
                     Ok(response)
                 },
             )
-            .await?;
+            .await
+            {
+                Ok(ws_stream) => ws_stream,
+                Err(e) => {
+                    log::error!("error in websocket upgrade: {:#}", e);
+                    continue;
+                }
+            };
             let authentication = authentication.clone();
             tokio::spawn(async move {
                 log::info!("Incoming TCP connection from: {}", remote_addr);
