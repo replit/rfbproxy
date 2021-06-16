@@ -1,8 +1,17 @@
-{ lib, rustPlatform, fetchFromGitHub, openssl, stdenv, libpulseaudio, pkg-config, protobuf, lame, libopus }:
+{ lib, rustPlatform, fetchFromGitHub, openssl, stdenv, libpulseaudio, pkg-config, protobuf, lame, libopus, git, runCommand }:
 
+let
+    gitSrc = builtins.filterSource
+               (path: type: true)
+               ./.;
+in
 rustPlatform.buildRustPackage rec {
   pname = "rfbproxy";
-  version = "0.1.1-90b68e1";
+  revision = runCommand "get-rev" {
+      nativeBuildInputs = [ git ];
+      dummy = builtins.currentTime;
+  } "GIT_DIR=${gitSrc}/.git git rev-parse --short HEAD | tr -d '\n' > $out";
+  version = builtins.readFile revision;
 
   src = ./.;
 
