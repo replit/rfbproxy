@@ -4,12 +4,7 @@ rustPlatform.buildRustPackage rec {
   pname = "rfbproxy";
   version = "0.1.1-90b68e1";
 
-  src = fetchFromGitHub {
-    owner = "replit";
-    repo = "rfbproxy";
-    rev = "v${version}";
-    sha256 = "0v33xmqv7fcaq1spiq7mvqpsx47r6ghgsbv4yhcghalxmy7cb2gc";
-  };
+  src = ./.;
 
   cargoSha256 = "1djk818q08lqaz97qqp0wxfx34dvq91sjfnwkz3qq61191j1gp8w";
 
