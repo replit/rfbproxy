@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs>{} } :
+{ pkgs ? import <nixpkgs>{}, versionArg ? "" } :
 let
     inherit(pkgs)
         rustPlatform
@@ -13,12 +13,19 @@ let
         copyPathToStore;
 in
 let
-    src = copyPathToStore ./.;
+    src = pkgs.copyPathToStore ./.;
     revision = runCommand "get-rev" {
         nativeBuildInputs = [ git ];
         # impure, do every time, see https://github.com/NixOS/nixpkgs/blob/master/pkgs/build-support/fetchgitlocal/default.nix#L9
         dummy = builtins.currentTime;
-    } "GIT_DIR=${src}/.git git rev-parse --short HEAD | tr -d '\n' > $out";
+    } ''
+        if [ -d ${src}/.git ]; then
+            cd ${src}
+            git rev-parse --short HEAD | tr -d '\n' > $out
+        else
+            echo ${versionArg} | tr -d '\n' > $out
+        fi
+    '';
 in
 rustPlatform.buildRustPackage rec {
   pname = "rfbproxy";
