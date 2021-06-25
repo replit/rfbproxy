@@ -40,7 +40,7 @@ pub struct Mp3Encoder {
 impl Mp3Encoder {
     pub fn new(channels: u8, kbps: u16) -> Result<Mp3Encoder> {
         let ctx = unsafe { lame_sys::lame_init() };
-        if ctx == std::ptr::null_mut() {
+        if ctx.is_null() {
             bail!("could not initialize the lame library");
         }
         check_err(unsafe { lame_sys::lame_set_num_channels(ctx, channels as i32) })
