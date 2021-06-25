@@ -4,3 +4,4 @@
 /pulse/
 test.py
 *.log
+.idea
