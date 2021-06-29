@@ -30,3 +30,9 @@ jobs:
         run: cargo test
       - name: doc
         run: cargo doc
+
+  nix:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: samueldr/action-nix-build@master
