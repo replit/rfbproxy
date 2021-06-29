@@ -33,7 +33,7 @@ rustPlatform.buildRustPackage rec {
 
   inherit src;
 
-  cargoSha256 = "1djk818q08lqaz97qqp0wxfx34dvq91sjfnwkz3qq61191j1gp8w";
+  cargoSha256 = "1igdzxq68jd4qmkf76zvwz46iqgrqds4jgfdxirpi0zp3hb8kd0j";
 
   buildInputs = [ openssl libpulseaudio protobuf lame libopus ];
   nativeBuildInputs = [ pkg-config ];
