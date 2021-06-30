@@ -1,7 +1,7 @@
 { pkgs ? import <nixpkgs>{}, versionArg ? "" } :
 let
     inherit(pkgs)
-        rustPlatform
+        stdenv
         openssl
         libpulseaudio
         pkg-config
@@ -11,8 +11,7 @@ let
         git
         runCommand
         copyPathToStore;
-in
-let
+
     src = pkgs.copyPathToStore ./.;
     revision = runCommand "get-rev" {
         nativeBuildInputs = [ git ];
@@ -26,19 +25,46 @@ let
             echo ${versionArg} | tr -d '\n' > $out
         fi
     '';
-in
-rustPlatform.buildRustPackage rec {
-  pname = "rfbproxy";
-  version = builtins.readFile revision;
 
-  inherit src;
+    generatedBuild = import ./Cargo.nix {
+        inherit pkgs;
+        buildRustCrateForPkgs = pkgs: pkgs.buildRustCrate.override {
+            defaultCrateOverrides = pkgs.defaultCrateOverrides // {
+                "opus-sys" = attrs: {
+                    nativeBuildInputs = [ pkg-config ];
+                    buildInputs = [ libopus ];
+                };
+                "libpulse-sys" = attrs: {
+                    nativeBuildInputs = [ pkg-config ];
+                    buildInputs = [ libpulseaudio ];
+                };
+                "libpulse-simple-sys" = attrs: {
+                    nativeBuildInputs = [ pkg-config ];
+                    buildInputs = [ libpulseaudio ];
+                };
+                "lame-sys" = attrs: {
+                    nativeBuildInputs = [ lame ];
+                    buildInputs = [ libpulseaudio ];
+                };
+                rfbproxy = attrs: {
+                    buildInputs = [ openssl protobuf ];
+                    nativeBuildInputs = [ pkg-config ];
 
-  cargoSha256 = "1igdzxq68jd4qmkf76zvwz46iqgrqds4jgfdxirpi0zp3hb8kd0j";
+                    # needed for internal protobuf c wrapper library
+                    PROTOC = "${protobuf}/bin/protoc";
+                    PROTOC_INCLUDE = "${protobuf}/include";
+                };
+            };
+        };
+    };
+    crate2nix = generatedBuild.rootCrate.build;
+in stdenv.mkDerivation {
+    pname = "rfbproxy";
+    version = builtins.readFile revision;
 
-  buildInputs = [ openssl libpulseaudio protobuf lame libopus ];
-  nativeBuildInputs = [ pkg-config ];
+    src = crate2nix;
 
-  # needed for internal protobuf c wrapper library
-  PROTOC = "${protobuf}/bin/protoc";
-  PROTOC_INCLUDE = "${protobuf}/include";
+    installPhase = ''
+        cp -r ${crate2nix} $out
+    '';
 }
