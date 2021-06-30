@@ -42,12 +42,8 @@ let
                     nativeBuildInputs = [ pkg-config ];
                     buildInputs = [ libpulseaudio ];
                 };
-                "lame-sys" = attrs: {
-                    nativeBuildInputs = [ lame ];
-                    buildInputs = [ libpulseaudio ];
-                };
                 rfbproxy = attrs: {
-                    buildInputs = [ openssl protobuf ];
+                    buildInputs = [ openssl protobuf lame ];
                     nativeBuildInputs = [ pkg-config ];
 
                     # needed for internal protobuf c wrapper library
