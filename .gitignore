@@ -5,3 +5,6 @@
 test.py
 *.log
 .idea
+
+# nix build creates a "result" symlink to the nix store output
+result
