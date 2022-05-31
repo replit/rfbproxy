@@ -8,6 +8,10 @@ enable audio using the [Replit Audio RFB extension](#replit-audio-rfb-extension)
 `--enable-audio` flag is passed or the `VNC_ENABLE_EXPERIMENTAL_AUDIO`
 environment variable is set to a non-empty value.
 
+Note that since this project only supports RFB-over-WebSockets
+the only VNC client that supports that particular combination and
+the only one that will work with it is [noVNC](https://novnc.com).
+
 # Running
 
 Since this is a proxy, you'll need to have an RFB server running
