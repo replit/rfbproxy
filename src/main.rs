@@ -369,8 +369,14 @@ async fn main() -> Result<()> {
                     const PROTOCOL_HEADER: &str = "Sec-WebSocket-Protocol";
                     if let Some(val) = request.headers().get(PROTOCOL_HEADER) {
                         response.headers_mut().insert(PROTOCOL_HEADER, val.clone());
+                        Ok(response)
+                    } else {
+                        let resp = tungstenite::handshake::server::Response::builder()
+                            .status(http::StatusCode::BAD_REQUEST)
+                            .body(Some("This is a WebSocket server".into()))
+                            .unwrap();
+                        Err(resp)
                     }
-                    Ok(response)
                 },
             )
             .await
