@@ -202,7 +202,7 @@ where
     // is provided _and_ the server requires a password.
     let use_token = username != "runner" || password.is_empty();
     if use_token {
-        if let Err(err) = validate_token(&username, &replid, pubkeys).context("token validation") {
+        if let Err(err) = validate_token(&username, replid, pubkeys).context("token validation") {
             // Let the client know that it messed up.
             ws_stream
                 .send(WebSocketMessage::Binary((b"\x00\x00\x00\x01").to_vec()))
@@ -328,7 +328,7 @@ where
         bail!("mismatched payload {:?}", &buf[..n]);
     }
     log::debug!("<-: {:?}", &buf[..n]);
-    stream.write_all(&message).await?;
+    stream.write_all(message).await?;
 
     Ok(())
 }
@@ -411,8 +411,8 @@ fn validate_token(token: &str, replid: &str, pubkeys: &HashMap<String, Vec<u8>>)
 
     let repl_token = crate::api::ReplToken::decode(
         &*base64::decode(&match paseto::v2::verify_paseto(
-            &token,
-            Some(&std::str::from_utf8(&raw_footer)?),
+            token,
+            Some(std::str::from_utf8(&raw_footer)?),
             pubkeys
                 .get(&footer.key_id)
                 .ok_or_else(|| anyhow!("could not find {} in pubkeys", &footer.key_id))?,
@@ -607,8 +607,8 @@ mod tests {
         let pubkey = keypair.public_key();
 
         let token = mint_token(
-            &replid,
-            &keyid,
+            replid,
+            keyid,
             None,
             Some(prost_types::Timestamp {
                 seconds: 253402329599,
@@ -715,8 +715,8 @@ mod tests {
         let pubkey = keypair.public_key();
 
         let token = mint_token(
-            &replid,
-            &keyid,
+            replid,
+            keyid,
             None,
             Some(prost_types::Timestamp {
                 seconds: 253402329599,
@@ -806,8 +806,8 @@ mod tests {
         let pubkey = keypair.public_key();
 
         let token = mint_token(
-            &replid,
-            &keyid,
+            replid,
+            keyid,
             None,
             Some(prost_types::Timestamp {
                 seconds: 253402329599,
@@ -917,8 +917,8 @@ mod tests {
         let pubkey = keypair.public_key();
 
         let token = mint_token(
-            &replid,
-            &keyid,
+            replid,
+            keyid,
             None,
             Some(prost_types::Timestamp {
                 seconds: 253402329599,
@@ -1029,8 +1029,8 @@ mod tests {
         pubkeys_wrong_pubkey.insert(keyid.to_string(), pubkey_other.as_ref().to_vec());
 
         let token = mint_token(
-            &replid,
-            &keyid,
+            replid,
+            keyid,
             None,
             Some(prost_types::Timestamp {
                 seconds: 253402329599,
@@ -1056,8 +1056,8 @@ mod tests {
 
         validate_token(
             &mint_token(
-                &replid,
-                &keyid,
+                replid,
+                keyid,
                 None,
                 Some(prost_types::Timestamp {
                     seconds: 0,
@@ -1071,15 +1071,15 @@ mod tests {
         )
         .expect_err("Should have rejected an expired token");
         validate_token(
-            &mint_token(&replid, &keyid, None, None, &keypair).expect("Failed to generate PASETO"),
+            &mint_token(replid, keyid, None, None, &keypair).expect("Failed to generate PASETO"),
             &replid.to_string(),
             &pubkeys,
         )
         .expect_err("Should have rejected an (implicitly) expired token");
         validate_token(
             &mint_token(
-                &replid,
-                &keyid,
+                replid,
+                keyid,
                 Some(prost_types::Timestamp {
                     seconds: 253402329599,
                     nanos: 0,

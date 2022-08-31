@@ -32,6 +32,7 @@ impl Display for Error {
 /// This is documented at
 /// https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#setpixelformat
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct PixelFormat {
     pub bits_per_pixel: u8,
     depth: u8,

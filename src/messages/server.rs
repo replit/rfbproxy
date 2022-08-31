@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 
 /// Represents a message that is sent from the server to the client.
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum Message {
     FramebufferUpdate(Vec<u8>),
     SetColorMapEntries(Vec<u8>),
