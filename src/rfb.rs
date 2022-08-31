@@ -26,6 +26,7 @@ pub struct RfbConnectionState {
 
 /// A Remote Framebuffer connection between a TCP server and a Websocket client.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct RfbConnection {
     stream: tokio::net::TcpStream,
     connection_state: Arc<RfbConnectionState>,

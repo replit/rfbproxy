@@ -197,13 +197,13 @@ impl WebmStreamMuxer {
             0x80,                                // Multiplexing app
             0x80 | application_name.len() as u8, // size
         ])?;
-        w.write_all(&application_name)?;
+        w.write_all(application_name)?;
         w.write_all(&[
             0x57,
             0x41,                                // Writing app
             0x80 | application_name.len() as u8, // size
         ])?;
-        w.write_all(&application_name)?;
+        w.write_all(application_name)?;
 
         // Tracks
         w.write_all(&[
@@ -335,9 +335,6 @@ mod tests {
     use crate::audio::Encoder;
 
     use std::io::Write;
-
-    use matroska;
-    use tempfile;
 
     fn init() {
         let _ = env_logger::builder().is_test(true).try_init();
