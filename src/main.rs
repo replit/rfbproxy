@@ -29,6 +29,7 @@ use tokio_tungstenite::tungstenite;
 use tokio_tungstenite::tungstenite::protocol::Message;
 
 /// The protobuf definitions.
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod api {
     include!(concat!(env!("OUT_DIR"), "/api.rs"));
 }

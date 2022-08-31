@@ -8,6 +8,7 @@ use bytes::Buf;
 
 /// Represents a message that is sent from the client to the server.
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum Message {
     SetPixelFormat(Vec<u8>),
     SetEncodings(Vec<u8>),
