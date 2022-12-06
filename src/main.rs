@@ -13,6 +13,7 @@ mod rfb;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::process;
 
 use anyhow::{bail, Context, Result};
 
@@ -99,6 +100,7 @@ async fn handle_connection<Stream>(
     mut ws_stream: tokio_tungstenite::WebSocketStream<Stream>,
     authentication: &auth::RfbAuthentication,
     enable_audio: bool,
+    run_once: bool,
 ) -> Result<()>
 where
     Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send,
@@ -143,6 +145,9 @@ where
 
         log::info!("client disconnected");
         ws.shutdown().await?;
+        if run_once {
+            process::exit(0x0);
+        }
         Ok::<(), anyhow::Error>(())
     };
 
@@ -186,6 +191,7 @@ async fn handle_request(
     remote_addr: SocketAddr,
     authentication: Arc<auth::RfbAuthentication>,
     enable_audio: bool,
+    run_once: bool,
 ) -> Result<Response<Body>> {
     // Clean the path so that it can't be used to access files outside the current working
     // directory.
@@ -235,7 +241,7 @@ async fn handle_request(
                 }
             };
             if let Err(e) =
-                handle_connection(rfb_addr, ws_stream, &authentication, enable_audio).await
+                handle_connection(rfb_addr, ws_stream, &authentication, enable_audio, run_once).await
             {
                 log::error!("error in websocket connection: {:#}", e);
             }
@@ -296,6 +302,11 @@ async fn main() -> Result<()> {
                 .takes_value(true)
                 .help("A JSON-encoded mapping of key IDs to base64-encoded ed25519 public keys"),
         )
+        .arg(
+            clap::Arg::with_name("once")
+                .long("once")
+                .help("Exit after a single client connection")
+        )
         .get_matches();
 
     if matches.value_of("replid").is_some() != matches.value_of("pubkeys").is_some() {
@@ -331,6 +342,7 @@ async fn main() -> Result<()> {
         // of the messages.
         Arc::new(auth::RfbAuthentication::Null)
     };
+    let run_once = matches.is_present("once");
 
     if matches.is_present("http-server") {
         let server = Server::bind(&local_addr.parse()?).serve(hyper::service::make_service_fn(
@@ -347,6 +359,7 @@ async fn main() -> Result<()> {
                                 remote_addr,
                                 authentication.clone(),
                                 enable_audio,
+                                run_once,
                             )
                             .await
                         }
@@ -385,7 +398,7 @@ async fn main() -> Result<()> {
             tokio::spawn(async move {
                 log::info!("Incoming TCP connection from: {}", remote_addr);
                 if let Err(e) =
-                    handle_connection(rfb_addr, ws_stream, &authentication, enable_audio).await
+                    handle_connection(rfb_addr, ws_stream, &authentication, enable_audio, run_once).await
                 {
                     log::error!("error in websocket connection: {:#}", e);
                 }
