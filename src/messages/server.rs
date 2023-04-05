@@ -85,7 +85,7 @@ impl Message {
                             if ctl == 0x08 {
                                 skip(src, 3)
                             } else if ctl == 0x09 {
-                                let len = get_compact(src)? as usize;
+                                let len = get_compact(src)?;
                                 skip(src, len)
                             } else {
                                 let mut filter = 0u8;
@@ -100,7 +100,7 @@ impl Message {
                                     if uncompressed_size < 12 {
                                         skip(src, uncompressed_size)
                                     } else {
-                                        let len = get_compact(src)? as usize;
+                                        let len = get_compact(src)?;
                                         skip(src, len)
                                     }
                                 } else if filter == 1 {
@@ -128,7 +128,7 @@ impl Message {
                                     if uncompressed_size < 12 {
                                         skip(src, uncompressed_size)
                                     } else {
-                                        let len = get_compact(src)? as usize;
+                                        let len = get_compact(src)?;
                                         skip(src, len)
                                     }
                                 } else {

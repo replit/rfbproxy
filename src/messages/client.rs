@@ -41,7 +41,7 @@ impl Display for Message {
                 write!(fmt, " )")
             }
             m => {
-                write!(fmt, "{:?}", m)
+                write!(fmt, "{m:?}")
             }
         }
     }

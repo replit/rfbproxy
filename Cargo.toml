@@ -1,8 +1,8 @@
 [package]
 name = "rfbproxy"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Luis Héctor Chávez <luis@repl.it>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
@@ -22,7 +22,7 @@ hyper-tungstenite = "0.2"
 lame-sys = "0.1.2"
 log = "*"
 opus = "0.2.1"
-paseto = { version = "2.0.1+1.0.3", features = ["v2"] }
+paseto = { version = "2.0.2+1.0.3", features = ["v2"] }
 path-clean = "0.1"
 prost = "0.7"
 prost-types = "0.7"

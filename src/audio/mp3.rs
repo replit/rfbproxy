@@ -44,9 +44,9 @@ impl Mp3Encoder {
             bail!("could not initialize the lame library");
         }
         check_err(unsafe { lame_sys::lame_set_num_channels(ctx, channels as i32) })
-            .with_context(|| format!("failed to set channels to {}", channels))?;
+            .with_context(|| format!("failed to set channels to {channels}"))?;
         check_err(unsafe { lame_sys::lame_set_brate(ctx, kbps as i32) })
-            .with_context(|| format!("failed to set kbps to {}", kbps))?;
+            .with_context(|| format!("failed to set kbps to {kbps}"))?;
         check_err(unsafe { lame_sys::lame_set_quality(ctx, 7) })
             .context("failed to set quality to 7")?;
         check_err(unsafe { lame_sys::lame_init_params(ctx) })
