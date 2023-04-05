@@ -68,7 +68,7 @@ where
                     break;
                 }
                 Ok(n) => {
-                    if let Err(err) = wws.send(Message::Binary((&buffer[..n]).to_vec())).await {
+                    if let Err(err) = wws.send(Message::Binary((buffer[..n]).to_vec())).await {
                         log::error!("failed to write a message to the client: {:#}", err);
                         break;
                     }
@@ -206,7 +206,7 @@ async fn handle_request(
             builder = builder.authority(authority.as_str());
         }
         if let Some(query) = uri.query() {
-            builder = builder.path_and_query(format!("{}?{}", clean_path, query));
+            builder = builder.path_and_query(format!("{clean_path}?{query}"));
         } else {
             builder = builder.path_and_query(clean_path);
         }
@@ -314,11 +314,15 @@ async fn main() -> Result<()> {
         || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or_else(|_| String::new()) != "";
     let authentication = if matches.value_of("replid").is_some() {
         let mut pubkeys_base64: HashMap<String, String> =
-            serde_json::from_str(matches.value_of("pubkeys").unwrap())?;
+            serde_json::from_str(matches.value_of("pubkeys").unwrap().trim())?;
         let pubkeys = pubkeys_base64
             .drain()
-            .map(|(keyid, pubkey)| Ok((keyid, base64::decode(pubkey)?)))
-            .collect::<std::result::Result<HashMap<String, Vec<u8>>, base64::DecodeError>>()?;
+            .map(|(keyid, pubkey)| {
+                let pubkey = base64::decode(pubkey)
+                    .with_context(|| anyhow::anyhow!("failed to parse pubkey {}", &keyid))?;
+                Ok((keyid, pubkey))
+            })
+            .collect::<std::result::Result<HashMap<String, Vec<u8>>, anyhow::Error>>()?;
         Arc::new(auth::RfbAuthentication::Replit {
             replid: matches.value_of("replid").unwrap().to_string(),
             pubkeys,

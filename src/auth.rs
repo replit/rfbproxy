@@ -410,16 +410,18 @@ fn validate_token(token: &str, replid: &str, pubkeys: &HashMap<String, Vec<u8>>)
     .context("failed to parse the PASETO footer")?;
 
     let repl_token = crate::api::ReplToken::decode(
-        &*base64::decode(&match paseto::v2::verify_paseto(
-            token,
-            Some(std::str::from_utf8(&raw_footer)?),
-            pubkeys
-                .get(&footer.key_id)
-                .ok_or_else(|| anyhow!("could not find {} in pubkeys", &footer.key_id))?,
-        ) {
-            Ok(message) => message,
-            Err(err) => bail!("failed to verify PASETO: {}", err),
-        })
+        &*base64::decode(
+            match paseto::v2::verify_paseto(
+                token,
+                Some(std::str::from_utf8(&raw_footer)?),
+                pubkeys
+                    .get(&footer.key_id)
+                    .ok_or_else(|| anyhow!("could not find {} in pubkeys", &footer.key_id))?,
+            ) {
+                Ok(message) => message,
+                Err(err) => bail!("failed to verify PASETO: {}", err),
+            },
+        )
         .context("failed to base64-decode the PASETO message")?,
     )
     .context("failed to parse the PASETO message")?;
