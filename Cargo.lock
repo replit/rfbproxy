@@ -1372,7 +1372,7 @@ dependencies = [
  "byte-slice-cast",
  "bytes",
  "chrono",
- "cipher 0.2.5",
+ "cipher 0.3.0",
  "clap",
  "des",
  "env_logger",
