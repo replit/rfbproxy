@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: ATiltedTree/setup-rust@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           rust-version: stable
           components: clippy
@@ -39,4 +39,4 @@ jobs:
         with:
           path: /nix
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - uses: samueldr/action-nix-build@master
+      - uses: DeterminateSystems/nix-installer-action@main
