@@ -34,11 +34,13 @@ trait Encoder {
     fn frame_len_ms(&self) -> u64;
 
     /// The number of channels.
+    #[allow(dead_code)]
     fn channels(&self) -> u8 {
         2
     }
 
     /// The internal delay of the codec, in samples.
+    #[allow(dead_code)]
     fn internal_delay(&mut self) -> Result<usize>;
 
     /// The maximum size of an encoded and contained frame.
