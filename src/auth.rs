@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bytes::BytesMut;
-use des::cipher::{BlockCipher, NewBlockCipher};
+use cipher::{BlockEncrypt, KeyInit};
 use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::protocol::Message as WebSocketMessage;
@@ -487,9 +487,9 @@ fn vnc_des_encrypt(password: &str, buf: &mut [u8]) {
             x >>= 1;
         }
     }
-    let des = des::Des::new(cipher::block::Key::<des::Des>::from_slice(&key));
+    let des = des::Des::new(cipher::Key::<des::Des>::from_slice(&key));
     for i in (0..buf.len()).step_by(8) {
-        des.encrypt_block(cipher::block::Block::<des::Des>::from_mut_slice(
+        des.encrypt_block(cipher::Block::<des::Des>::from_mut_slice(
             &mut buf[i..i + 8],
         ));
     }
