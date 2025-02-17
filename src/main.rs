@@ -311,7 +311,9 @@ async fn main() -> Result<()> {
         .context("missing --rfb-server arg")?
         .parse()?;
     let enable_audio = matches.is_present("enable-audio")
-        || std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO").unwrap_or_else(|_| String::new()) != "";
+        || !std::env::var("VNC_ENABLE_EXPERIMENTAL_AUDIO")
+            .unwrap_or_else(|_| String::new())
+            .is_empty();
     let authentication = if matches.value_of("replid").is_some() {
         let mut pubkeys_base64: HashMap<String, String> =
             serde_json::from_str(matches.value_of("pubkeys").unwrap().trim())?;

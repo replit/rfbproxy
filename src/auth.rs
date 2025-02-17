@@ -496,6 +496,7 @@ fn vnc_des_encrypt(password: &str, buf: &mut [u8]) {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
@@ -533,6 +534,8 @@ mod tests {
                 tokio_tungstenite::tungstenite::protocol::Role::Server,
                 Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
                     max_send_queue: None,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
                     max_message_size: None,
                     max_frame_size: None,
                     accept_unmasked_frames: true,
@@ -581,6 +584,8 @@ mod tests {
                 tokio_tungstenite::tungstenite::protocol::Role::Server,
                 Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
                     max_send_queue: None,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
                     max_message_size: None,
                     max_frame_size: None,
                     accept_unmasked_frames: true,
@@ -675,6 +680,8 @@ mod tests {
                 tokio_tungstenite::tungstenite::protocol::Role::Server,
                 Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
                     max_send_queue: None,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
                     max_message_size: None,
                     max_frame_size: None,
                     accept_unmasked_frames: true,
@@ -765,6 +772,8 @@ mod tests {
                 tokio_tungstenite::tungstenite::protocol::Role::Server,
                 Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
                     max_send_queue: None,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
                     max_message_size: None,
                     max_frame_size: None,
                     accept_unmasked_frames: true,
@@ -874,6 +883,8 @@ mod tests {
                 tokio_tungstenite::tungstenite::protocol::Role::Server,
                 Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
                     max_send_queue: None,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
                     max_message_size: None,
                     max_frame_size: None,
                     accept_unmasked_frames: true,
@@ -967,6 +978,8 @@ mod tests {
                 tokio_tungstenite::tungstenite::protocol::Role::Server,
                 Some(tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
                     max_send_queue: None,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
                     max_message_size: None,
                     max_frame_size: None,
                     accept_unmasked_frames: true,

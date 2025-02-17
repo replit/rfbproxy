@@ -98,11 +98,11 @@ impl Encoder for OpusEncoder {
 ///
 /// References:
 ///
-/// * [mse-byte-stream-format-webm] https://www.w3.org/TR/mse-byte-stream-format-webm/
-/// * https://www.webmproject.org/docs/container/
-/// * https://www.matroska.org/technical/elements.html
-/// * https://www.matroska.org/technical/codec_specs.html
-/// * https://www.matroska.org/technical/basics.html
+/// * [mse-byte-stream-format-webm] <https://www.w3.org/TR/mse-byte-stream-format-webm/>
+/// * <https://www.webmproject.org/docs/container/>
+/// * <https://www.matroska.org/technical/elements.html>
+/// * <https://www.matroska.org/technical/codec_specs.html>
+/// * <https://www.matroska.org/technical/basics.html>
 #[derive(Debug)]
 pub struct WebmStreamMuxer {
     sample_rate: u32,
