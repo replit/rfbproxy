@@ -2,7 +2,7 @@
   description = "An RFB proxy that enables WebSockets and audio";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -19,6 +19,18 @@
           defaultPackage = rfbproxy;
           packages = {
             inherit rfbproxy;
+          };
+          devShell = pkgs.mkShell {
+            packages = [
+              pkgs.cargo
+              pkgs.crate2nix
+              pkgs.lame
+              pkgs.libiconv
+              pkgs.libpulseaudio
+              pkgs.openssl
+              pkgs.pkg-config
+              pkgs.rustfmt
+            ];
           };
         }
       );

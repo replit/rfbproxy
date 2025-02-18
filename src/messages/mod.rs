@@ -30,7 +30,7 @@ impl Display for Error {
 /// A structure that represents how pixel values are represented in `FramebufferUpdate` messages.
 ///
 /// This is documented at
-/// https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#setpixelformat
+/// <https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#setpixelformat>
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct PixelFormat {
