@@ -461,7 +461,8 @@ fn validate_token(token: &str, replid: &str, pubkeys: &HashMap<String, Vec<u8>>)
         Some(crate::api::repl_token::Metadata::Id(id)) => id.id.clone(),
         _ => bail!("token does not contain a replid: {:?}", &repl_token),
     };
-    if token_replid != replid {
+    let pruned_replid = replid.split_once(":").map(|(replid, _)| replid.to_string());
+    if token_replid != replid && Some(&token_replid) != pruned_replid.as_ref() {
         bail!(
             "token not issued for replid {:?}: {:?}",
             &token_replid,
@@ -1056,6 +1057,8 @@ mod tests {
         .expect("Failed to generate PASETO");
 
         validate_token(&token, &replid.to_string(), &pubkeys).expect("Failed to validate token");
+        validate_token(&token, &format!("{replid}:01").to_string(), &pubkeys)
+            .expect("Failed to validate token");
         validate_token(
             &String::from("this is not a token"),
             &replid.to_string(),
