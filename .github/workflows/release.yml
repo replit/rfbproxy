@@ -10,8 +10,8 @@ on:
 jobs:
 
   release:
-    # Should match the version that Polygott uses.
-    runs-on: ubuntu-18.04
+    # Should match the version reported by /etc/lsb-release on Repls.
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v2

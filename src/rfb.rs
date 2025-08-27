@@ -80,7 +80,7 @@ impl RfbConnection {
         })
     }
 
-    pub fn split(&mut self) -> (ReadHalf, WriteHalf) {
+    pub fn split<'a>(&'a mut self) -> (ReadHalf<'a>, WriteHalf<'a>) {
         let (rs, ws) = self.stream.split();
         (
             ReadHalf {
