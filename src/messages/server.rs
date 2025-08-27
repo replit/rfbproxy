@@ -115,7 +115,7 @@ impl Message {
                                     skip(src, 3 * number_of_colors)?;
 
                                     let bpp = if number_of_colors <= 2 { 1 } else { 8 };
-                                    let row_size = (width * bpp + 7) / 8;
+                                    let row_size = (width * bpp).div_ceil(8);
                                     let uncompressed_size = row_size * height;
 
                                     log::debug!(
@@ -150,7 +150,7 @@ impl Message {
                         // Cursor Pseudo-encoding
                         -239 => {
                             skip(src, width * height * bytes_per_pixel)?;
-                            let row_size = (width + 7) / 8;
+                            let row_size = width.div_ceil(8);
                             skip(src, row_size * height)
                         }
                         // QEMU Extended Key Event Pseudo-encoding
